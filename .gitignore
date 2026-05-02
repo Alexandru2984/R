@@ -1,0 +1,30 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+.Ruserdata
+
+# User-specific files
+.Rproj.user/
+
+# Environment
+.env
+
+# Logs and Data
+logs/
+data/uploads/
+
+# Renv
+renv/library/
+renv/local/
+renv/staging/
+renv/python/
+.Rprofile
+
+# Tests and temporary artifacts
+tests/testthat/_snaps/
+*.html
+*.pdf
+*.csv
