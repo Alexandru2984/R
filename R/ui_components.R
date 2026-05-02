@@ -157,7 +157,7 @@ ui <- page_navbar(
       sidebar = sidebar(
         title = HTML("<span style='font-weight:700; letter-spacing:1px; color:#f8fafc'>FILTERS</span>"),
         width = 300,
-        dateRangeInput("date_filter", "Date Range"),
+        dateRangeInput("date_filter", "Date Range", end = Sys.Date(), max = Sys.Date()),
         selectInput("class_filter", "Classification", 
                     choices = c("All", "likely_human", "known_bot", "crawler", "scanner", "suspicious", "unknown")),
         br(),
