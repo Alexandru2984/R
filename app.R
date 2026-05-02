@@ -153,10 +153,23 @@ server <- function(input, output, session) {
     }, error = function(e) data.frame(time_bucket=Sys.time(), count=0))
     
     if (nrow(res) > 0) {
-      plot_ly(res, x = ~time_bucket, y = ~count, type = 'scatter', mode = 'lines+markers') %>%
-        layout(title = "Requests per Hour", xaxis = list(title = "Time"), yaxis = list(title = "Requests"))
+      plot_ly(res, x = ~time_bucket, y = ~count, type = 'scatter', mode = 'lines+markers',
+              line = list(color = '#06b6d4', width = 3),
+              marker = list(color = '#8b5cf6', size = 8)) %>%
+        layout(
+          title = "",
+          xaxis = list(title = "", gridcolor = 'rgba(255,255,255,0.05)', color = '#94a3b8'), 
+          yaxis = list(title = "Requests", gridcolor = 'rgba(255,255,255,0.05)', color = '#94a3b8'),
+          plot_bgcolor = 'transparent',
+          paper_bgcolor = 'transparent',
+          margin = list(l=40, r=20, t=20, b=40)
+        )
     } else {
-      plot_ly() %>% layout(title = "No data")
+      plot_ly() %>% layout(
+        title = list(text = "No data", font = list(color = '#94a3b8')),
+        plot_bgcolor = 'transparent',
+        paper_bgcolor = 'transparent'
+      )
     }
   })
 }
