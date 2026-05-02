@@ -79,10 +79,8 @@ server <- function(input, output, session) {
         scored_data <- score_requests(parsed$valid)
         
         # Insert file record
-        res <- dbSendQuery(pool, "INSERT INTO imported_log_files (filename, file_type) VALUES ($1, $2) RETURNING id")
-        dbBind(res, list(input$log_upload$name, file_type))
-        file_id <- dbFetch(res)$id[1]
-        dbClearResult(res)
+        res_file <- query_db(pool, "INSERT INTO imported_log_files (filename, file_type) VALUES ($1, $2) RETURNING id", list(input$log_upload$name, file_type))
+        file_id <- res_file$id[1]
         
         # Insert requests
         scored_data$file_id <- file_id

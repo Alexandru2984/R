@@ -18,10 +18,12 @@ get_db_pool <- function() {
 
 # Query wrapper to return data.table or data.frame
 query_db <- function(pool, query, params = list()) {
+  con <- poolCheckout(pool)
+  on.exit(poolReturn(con), add = TRUE)
   if (length(params) == 0) {
-    dbGetQuery(pool, query)
+    dbGetQuery(con, query)
   } else {
-    res <- dbSendQuery(pool, query)
+    res <- dbSendQuery(con, query)
     dbBind(res, params)
     data <- dbFetch(res)
     dbClearResult(res)
@@ -30,10 +32,12 @@ query_db <- function(pool, query, params = list()) {
 }
 
 execute_db <- function(pool, query, params = list()) {
+  con <- poolCheckout(pool)
+  on.exit(poolReturn(con), add = TRUE)
   if (length(params) == 0) {
-    dbExecute(pool, query)
+    dbExecute(con, query)
   } else {
-    res <- dbSendStatement(pool, query)
+    res <- dbSendStatement(con, query)
     dbBind(res, params)
     rows <- dbGetRowsAffected(res)
     dbClearResult(res)
