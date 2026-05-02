@@ -36,22 +36,22 @@ server <- function(input, output, session) {
     res <- tryCatch({
       query_db(pool, "SELECT COUNT(*) as n FROM requests")
     }, error = function(e) data.frame(n=0))
-    output$total_req <- renderText({ if(nrow(res)>0) res$n[1] else 0 })
+    output$total_req <- renderText({ if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0" })
     
     res_ips <- tryCatch({
       query_db(pool, "SELECT COUNT(DISTINCT ip_address) as n FROM requests")
     }, error = function(e) data.frame(n=0))
-    output$unique_ips <- renderText({ if(nrow(res_ips)>0) res_ips$n[1] else 0 })
+    output$unique_ips <- renderText({ if(nrow(res_ips)>0) format(as.numeric(res_ips$n[1]), big.mark=",") else "0" })
     
     res_bots <- tryCatch({
       query_db(pool, "SELECT COUNT(*) as n FROM requests WHERE classification IN ('known_bot', 'scanner', 'suspicious')")
     }, error = function(e) data.frame(n=0))
-    output$sus_bots <- renderText({ if(nrow(res_bots)>0) res_bots$n[1] else 0 })
+    output$sus_bots <- renderText({ if(nrow(res_bots)>0) format(as.numeric(res_bots$n[1]), big.mark=",") else "0" })
     
     res_404 <- tryCatch({
       query_db(pool, "SELECT COUNT(*) as n FROM requests WHERE status_code = 404")
     }, error = function(e) data.frame(n=0))
-    output$sus_404 <- renderText({ if(nrow(res_404)>0) res_404$n[1] else 0 })
+    output$sus_404 <- renderText({ if(nrow(res_404)>0) format(as.numeric(res_404$n[1]), big.mark=",") else "0" })
   })
   
   # Handle upload
