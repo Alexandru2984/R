@@ -148,11 +148,16 @@ cyber_theme <- bs_add_rules(cyber_theme, "
 ")
 
 ui <- page_navbar(
+  id = "main_nav",
   title = "R Traffic Intelligence",
   theme = cyber_theme,
   fillable = TRUE,
   
+  nav_spacer(),
+  nav_item(uiOutput("auth_button_ui")),
+  
   nav_panel("Dashboard",
+    uiOutput("demo_banner"),
     layout_sidebar(
       sidebar = sidebar(
         title = HTML("<span style='font-weight:700; letter-spacing:1px; color:#f8fafc'>FILTERS</span>"),

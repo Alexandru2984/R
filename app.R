@@ -23,14 +23,82 @@ server <- function(input, output, session) {
   
   # Reactive values
   rv <- reactiveValues(refresh_trigger = 0)
+  is_logged_in <- reactiveVal(FALSE)
   
   observeEvent(input$refresh, {
     rv$refresh_trigger <- rv$refresh_trigger + 1
   })
   
+  # Hide import tab by default if not logged in
+  observe({
+    if (!is_logged_in()) {
+      nav_hide("main_nav", "Logs & Import")
+    } else {
+      nav_show("main_nav", "Logs & Import")
+    }
+  })
+  
+  # Auth UI - Login / Logout button
+  output$auth_button_ui <- renderUI({
+    if (is_logged_in()) {
+      actionButton("btn_logout", "Logout", class = "btn-outline-danger btn-sm mt-2", icon = icon("sign-out-alt"))
+    } else {
+      actionButton("btn_login_modal", "Admin Login", class = "btn-outline-info btn-sm mt-2", icon = icon("lock"))
+    }
+  })
+  
+  # Demo Banner
+  output$demo_banner <- renderUI({
+    if (!is_logged_in()) {
+      tags$div(class = "alert alert-warning text-center mx-3 mt-3 mb-0", 
+               style="border-radius:10px; font-weight:bold; background-color: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); color: #f8fafc;",
+               icon("eye-slash"), " PUBLIC DEMO MODE - Showing randomized mock data. Please login to view live production logs."
+      )
+    }
+  })
+  
+  # Login Modal
+  observeEvent(input$btn_login_modal, {
+    showModal(modalDialog(
+      title = "Admin Authentication",
+      textInput("auth_user", "Username"),
+      passwordInput("auth_pass", "Password"),
+      footer = tagList(
+        modalButton("Cancel"),
+        actionButton("btn_login_submit", "Login", class = "btn-primary")
+      )
+    ))
+  })
+  
+  # Login submit
+  observeEvent(input$btn_login_submit, {
+    valid_user <- Sys.getenv("APP_USERNAME", "admin")
+    valid_pass <- Sys.getenv("APP_PASSWORD", "change_me")
+    
+    if (input$auth_user == valid_user && input$auth_pass == valid_pass) {
+      is_logged_in(TRUE)
+      removeModal()
+      showNotification("Logged in successfully. Live production data loaded.", type = "message")
+      rv$refresh_trigger <- rv$refresh_trigger + 1
+    } else {
+      showNotification("Invalid credentials", type = "error")
+    }
+  })
+  
+  # Logout
+  observeEvent(input$btn_logout, {
+    is_logged_in(FALSE)
+    showNotification("Logged out. Mock data loaded.", type = "warning")
+    rv$refresh_trigger <- rv$refresh_trigger + 1
+  })
+  
+  # Reactive tables depending on auth state
+  tbl_req <- reactive({ if(is_logged_in()) "requests" else "mock_requests" })
+  tbl_ip <- reactive({ if(is_logged_in()) "ip_summary" else "mock_ip_summary" })
+  
   # Helper for dynamic where clauses
   where_data <- reactive({
-    rv$refresh_trigger # Depend on refresh button, although it will also auto-update on input change
+    rv$refresh_trigger # Depend on refresh button
     
     date_f <- input$date_filter
     class_f <- input$class_filter
@@ -48,7 +116,7 @@ server <- function(input, output, session) {
       if (isTruthy(date_f[2])) {
         param_idx <- length(params) + 1
         where_parts <- c(where_parts, sprintf("%s%s < $%d", prefix, time_col, param_idx))
-        params <- c(params, as.character(date_f[2] + 1)) # Next day for inclusive end date
+        params <- c(params, as.character(date_f[2] + 1))
       }
       if (isTruthy(class_f) && class_f != "All") {
         param_idx <- length(params) + 1
@@ -70,7 +138,7 @@ server <- function(input, output, session) {
   output$total_req <- renderText({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(*) as n FROM requests", w$clause), w$params)
+      query_db(pool, paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -78,7 +146,7 @@ server <- function(input, output, session) {
   output$unique_ips <- renderText({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(DISTINCT ip_address) as n FROM requests", w$clause), w$params)
+      query_db(pool, paste("SELECT COUNT(DISTINCT ip_address) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -88,7 +156,7 @@ server <- function(input, output, session) {
     bot_cond <- "classification IN ('known_bot', 'scanner', 'suspicious')"
     w$clause <- if (w$clause == "") paste("WHERE", bot_cond) else paste(w$clause, "AND", bot_cond)
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(*) as n FROM requests", w$clause), w$params)
+      query_db(pool, paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -98,7 +166,7 @@ server <- function(input, output, session) {
     cond_404 <- "status_code = 404"
     w$clause <- if (w$clause == "") paste("WHERE", cond_404) else paste(w$clause, "AND", cond_404)
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(*) as n FROM requests", w$clause), w$params)
+      query_db(pool, paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -165,7 +233,7 @@ server <- function(input, output, session) {
   output$table_top_paths <- renderDT({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT path, COUNT(*) as count FROM requests", w$clause, "GROUP BY path ORDER BY count DESC LIMIT 10"), w$params)
+      query_db(pool, paste("SELECT path, COUNT(*) as count FROM", tbl_req(), w$clause, "GROUP BY path ORDER BY count DESC LIMIT 10"), w$params)
     }, error = function(e) data.frame(path=character(0), count=integer(0)))
     datatable(res, options = list(pageLength = 5))
   })
@@ -173,7 +241,7 @@ server <- function(input, output, session) {
   output$table_top_ips <- renderDT({
     w <- where_data()$ip
     res <- tryCatch({
-      query_db(pool, paste("SELECT ip_address, total_requests, risk_score, classification FROM ip_summary", w$clause, "ORDER BY risk_score DESC LIMIT 10"), w$params)
+      query_db(pool, paste("SELECT ip_address, total_requests, risk_score, classification FROM", tbl_ip(), w$clause, "ORDER BY risk_score DESC LIMIT 10"), w$params)
     }, error = function(e) data.frame(ip=character(0)))
     datatable(res, options = list(pageLength = 5))
   })
@@ -181,7 +249,7 @@ server <- function(input, output, session) {
   output$table_recent_reqs <- renderDT({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT timestamp, ip_address, method, path, status_code, classification FROM requests", w$clause, "ORDER BY timestamp DESC LIMIT 50"), w$params)
+      query_db(pool, paste("SELECT timestamp, ip_address, method, path, status_code, classification FROM", tbl_req(), w$clause, "ORDER BY timestamp DESC LIMIT 50"), w$params)
     }, error = function(e) data.frame())
     datatable(res, options = list(pageLength = 10))
   })
@@ -190,7 +258,7 @@ server <- function(input, output, session) {
   output$chart_time <- renderPlotly({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT date_trunc('hour', timestamp) as time_bucket, COUNT(*) as count FROM requests", w$clause, "GROUP BY time_bucket ORDER BY time_bucket"), w$params)
+      query_db(pool, paste("SELECT date_trunc('hour', timestamp) as time_bucket, COUNT(*) as count FROM", tbl_req(), w$clause, "GROUP BY time_bucket ORDER BY time_bucket"), w$params)
     }, error = function(e) data.frame(time_bucket=Sys.time(), count=0))
     
     if (nrow(res) > 0) {
