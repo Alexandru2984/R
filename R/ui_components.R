@@ -15,9 +15,13 @@ cyber_theme <- bs_theme(
   info = "#3b82f6",       # Blue
   warning = "#8b5cf6",    # Purple
   danger = "#ef4444",     # Red
-  base_font = font_google("Inter"),
-  heading_font = font_google("Inter"),
-  code_font = font_google("Fira Code")
+  # local = FALSE: link Google Fonts instead of downloading them. With the
+  # default (local = TRUE) every page render downloaded the fonts into a new
+  # directory under the R session tempdir and never removed it, ~60 files a
+  # minute, until /tmp ran out of inodes for the whole machine.
+  base_font = font_google("Inter", local = FALSE),
+  heading_font = font_google("Inter", local = FALSE),
+  code_font = font_google("Fira Code", local = FALSE)
 )
 
 # Add custom glowing CSS rules
