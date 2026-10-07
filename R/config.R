@@ -24,13 +24,19 @@ load_env <- function(env_file = ".env") {
 # Ensure env is loaded
 load_env()
 
+required_env <- function(name) {
+  value <- Sys.getenv(name, "")
+  if (!nzchar(value)) stop(sprintf("Required environment variable %s is missing", name), call. = FALSE)
+  value
+}
+
 get_config <- function() {
   list(
     db_host = Sys.getenv("DB_HOST", "127.0.0.1"),
     db_port = as.integer(Sys.getenv("DB_PORT", "5432")),
-    db_name = Sys.getenv("DB_NAME", "r_traffic_intel"),
-    db_user = Sys.getenv("DB_USER", "r_traffic_user"),
-    db_password = Sys.getenv("DB_PASSWORD", "change_me"),
+    db_name = required_env("DB_NAME"),
+    db_user = required_env("DB_USER"),
+    db_password = required_env("DB_PASSWORD"),
     log_dir = Sys.getenv("LOG_DIR", "logs"),
     data_dir = Sys.getenv("DATA_DIR", "data")
   )
