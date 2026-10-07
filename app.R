@@ -8,10 +8,12 @@ library(dplyr)
 # Source modules
 source("R/config.R")
 source("R/db.R")
+source("R/auth.R")
 source("R/ui_components.R")
 
 # Initialize pool
 pool <- NULL
+auth_limiter <- new_auth_limiter()
 
 server <- function(input, output, session) {
   
@@ -24,6 +26,7 @@ server <- function(input, output, session) {
   # Reactive values
   rv <- reactiveValues(refresh_trigger = 0)
   is_logged_in <- reactiveVal(FALSE)
+  auth_key <- auth_client_key(session$request)
   
   observeEvent(input$refresh, {
     rv$refresh_trigger <- rv$refresh_trigger + 1
@@ -72,16 +75,27 @@ server <- function(input, output, session) {
   
   # Login submit
   observeEvent(input$btn_login_submit, {
-    valid_user <- Sys.getenv("APP_USERNAME", "admin")
-    valid_pass <- Sys.getenv("APP_PASSWORD", "change_me")
-    
-    if (input$auth_user == valid_user && input$auth_pass == valid_pass) {
+    if (auth_locked(auth_limiter, auth_key)) {
+      updateTextInput(session, "auth_pass", value = "")
+      showNotification("Too many attempts. Try again later.", type = "error")
+      return()
+    }
+
+    valid_user <- Sys.getenv("APP_USERNAME", "")
+    valid_hash <- Sys.getenv("APP_PASSWORD_HASH", "")
+
+    if (verify_admin_credentials(input$auth_user, input$auth_pass, valid_user, valid_hash)) {
+      clear_auth_failures(auth_limiter, auth_key)
       is_logged_in(TRUE)
+      updateTextInput(session, "auth_pass", value = "")
       removeModal()
       showNotification("Logged in successfully. Live production data loaded.", type = "message")
       rv$refresh_trigger <- rv$refresh_trigger + 1
     } else {
-      showNotification("Invalid credentials", type = "error")
+      locked <- record_auth_failure(auth_limiter, auth_key)
+      updateTextInput(session, "auth_pass", value = "")
+      message <- if (locked) "Too many attempts. Try again later." else "Invalid credentials"
+      showNotification(message, type = "error")
     }
   })
   
@@ -173,6 +187,7 @@ server <- function(input, output, session) {
   
   # Handle upload
   observeEvent(input$btn_process, {
+    req(is_logged_in())
     req(input$log_upload)
     output$upload_status <- renderText("Processing...")
     

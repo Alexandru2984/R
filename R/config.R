@@ -2,7 +2,7 @@
 # Read .env file manually since dotenv might not be installed
 
 load_env <- function(env_file = ".env") {
-  if (file.exists(env_file)) {
+  if (file.exists(env_file) && file.access(env_file, 4) == 0) {
     lines <- readLines(env_file, warn = FALSE)
     lines <- lines[trimws(lines) != ""]
     lines <- lines[!grepl("^#", trimws(lines))]
@@ -11,9 +11,11 @@ load_env <- function(env_file = ".env") {
       if (length(parts) >= 2) {
         key <- trimws(parts[1])
         value <- trimws(paste(parts[-1], collapse = "="))
-        args <- list(value)
-        names(args) <- key
-        do.call(Sys.setenv, args)
+        if (is.na(Sys.getenv(key, unset = NA_character_))) {
+          args <- list(value)
+          names(args) <- key
+          do.call(Sys.setenv, args)
+        }
       }
     }
   }
