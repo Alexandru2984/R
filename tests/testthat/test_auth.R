@@ -35,3 +35,18 @@ test_that("failure windows expire before counting new attempts", {
   expect_false(record_auth_failure(limiter, key, now + AUTH_WINDOW_SECONDS + 1))
   expect_equal(limiter[[key]]$count, 1L)
 })
+
+test_that("malformed credentials fail closed and proxy trust is bounded", {
+  expect_false(verify_admin_credentials(NA_character_, NA_character_, "admin", "hash"))
+  expect_false(verify_admin_credentials(rep("admin", 2), "x", "admin", "hash"))
+  expect_false(verify_admin_credentials("admin", paste(rep("x", 1025), collapse = ""), "admin", "hash"))
+  expect_equal(auth_client_key(list(REMOTE_ADDR = "192.0.2.1", HTTP_X_REAL_IP = "198.51.100.1")), "192.0.2.1")
+  expect_equal(auth_client_key(list(REMOTE_ADDR = "127.0.0.1", HTTP_X_REAL_IP = "198.51.100.1")), "198.51.100.1")
+})
+
+test_that("admin sessions have both idle and absolute expiration", {
+  now <- Sys.time()
+  expect_true(admin_session_valid(now, now, now + 30))
+  expect_false(admin_session_valid(now, now, now + AUTH_IDLE_SECONDS))
+  expect_false(admin_session_valid(now - AUTH_SESSION_SECONDS, now, now))
+})

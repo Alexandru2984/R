@@ -10,23 +10,31 @@ source("R/config.R")
 source("R/db.R")
 source("R/auth.R")
 source("R/ui_components.R")
+for (module in c("validation", "parser_nginx", "parser_cloudflare", "detection_rules", "scoring", "summaries", "import")) source(paste0("R/", module, ".R"))
+options(shiny.sanitize.errors = TRUE, shiny.maxRequestSize = MAX_IMPORT_BYTES)
 
 # Initialize pool
 pool <- NULL
 auth_limiter <- new_auth_limiter()
+process_pool <- function() {
+  if (is.null(pool)) pool <<- get_db_pool()
+  pool
+}
+onStop(function() { if (!is.null(pool)) pool::poolClose(pool) })
 
 server <- function(input, output, session) {
-  
-  # Connect to DB
-  pool <<- get_db_pool()
-  onStop(function() {
-    if (!is.null(pool)) poolClose(pool)
-  })
   
   # Reactive values
   rv <- reactiveValues(refresh_trigger = 0)
   is_logged_in <- reactiveVal(FALSE)
   auth_key <- auth_client_key(session$request)
+  auth_started <- NULL
+  auth_active <- NULL
+  observe({
+    invalidateLater(30000, session)
+    if (is_logged_in() && !admin_session_valid(auth_started, auth_active)) is_logged_in(FALSE)
+  })
+  observeEvent(input$refresh, { if (is_logged_in()) auth_active <<- Sys.time() })
   
   observeEvent(input$refresh, {
     rv$refresh_trigger <- rv$refresh_trigger + 1
@@ -86,6 +94,8 @@ server <- function(input, output, session) {
 
     if (verify_admin_credentials(input$auth_user, input$auth_pass, valid_user, valid_hash)) {
       clear_auth_failures(auth_limiter, auth_key)
+      auth_started <<- Sys.time()
+      auth_active <<- Sys.time()
       is_logged_in(TRUE)
       updateTextInput(session, "auth_pass", value = "")
       removeModal()
@@ -152,7 +162,7 @@ server <- function(input, output, session) {
   output$total_req <- renderText({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
+      query_db(process_pool(), paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -160,7 +170,7 @@ server <- function(input, output, session) {
   output$unique_ips <- renderText({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(DISTINCT ip_address) as n FROM", tbl_req(), w$clause), w$params)
+      query_db(process_pool(), paste("SELECT COUNT(DISTINCT ip_address) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -170,7 +180,7 @@ server <- function(input, output, session) {
     bot_cond <- "classification IN ('known_bot', 'scanner', 'suspicious')"
     w$clause <- if (w$clause == "") paste("WHERE", bot_cond) else paste(w$clause, "AND", bot_cond)
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
+      query_db(process_pool(), paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -180,7 +190,7 @@ server <- function(input, output, session) {
     cond_404 <- "status_code = 404"
     w$clause <- if (w$clause == "") paste("WHERE", cond_404) else paste(w$clause, "AND", cond_404)
     res <- tryCatch({
-      query_db(pool, paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
+      query_db(process_pool(), paste("SELECT COUNT(*) as n FROM", tbl_req(), w$clause), w$params)
     }, error = function(e) data.frame(n=0))
     if(nrow(res)>0) format(as.numeric(res$n[1]), big.mark=",") else "0"
   })
@@ -191,64 +201,27 @@ server <- function(input, output, session) {
     req(input$log_upload)
     output$upload_status <- renderText("Processing...")
     
-    file_path <- input$log_upload$datapath
-    file_type <- input$log_type
-    
+    req(admin_session_valid(auth_started, auth_active))
+    auth_active <<- Sys.time()
     tryCatch({
-      source("R/parser_nginx.R")
-      source("R/parser_cloudflare.R")
-      source("R/scoring.R")
-      source("R/summaries.R")
-      
-      if (file_type == "nginx") {
-        parsed <- parse_nginx_log(file_path)
-      } else {
-        parsed <- parse_cloudflare_csv(file_path)
-      }
-      
-      if (!is.null(parsed$valid) && nrow(parsed$valid) > 0) {
-        scored_data <- score_requests(parsed$valid)
-        res_file <- query_db(pool, "INSERT INTO imported_log_files (filename, file_type) VALUES ($1, $2) RETURNING id", list(input$log_upload$name, file_type))
-        file_id <- res_file$id[1]
-        
-        scored_data$file_id <- file_id
-        dbAppendTable(pool, "requests", scored_data)
-        
-        ip_sums <- aggregate_ips(scored_data)
-        if (!is.null(ip_sums)) {
-          for (i in 1:nrow(ip_sums)) {
-            row <- ip_sums[i, ]
-            q <- "INSERT INTO ip_summary (ip_address, total_requests, unique_paths, error_404_count, risk_score, classification, last_seen) 
-                  VALUES ($1, $2, $3, $4, $5, $6, $7)
-                  ON CONFLICT (ip_address) DO UPDATE SET 
-                  total_requests = ip_summary.total_requests + EXCLUDED.total_requests,
-                  unique_paths = EXCLUDED.unique_paths,
-                  error_404_count = ip_summary.error_404_count + EXCLUDED.error_404_count,
-                  risk_score = GREATEST(ip_summary.risk_score, EXCLUDED.risk_score),
-                  classification = EXCLUDED.classification,
-                  last_seen = GREATEST(ip_summary.last_seen, EXCLUDED.last_seen)"
-            execute_db(pool, q, list(
-              row$ip_address, row$total_requests, row$unique_paths, row$error_404_count, 
-              row$risk_score, row$classification, row$last_seen
-            ))
-          }
-        }
-        
-        output$upload_status <- renderText(sprintf("Success! Inserted %d requests.", nrow(scored_data)))
-        rv$refresh_trigger <- rv$refresh_trigger + 1
-      } else {
-        output$upload_status <- renderText("No valid data found in file.")
-      }
+      prepared <- prepare_import(input$log_upload$datapath, input$log_type, uploaded = TRUE)
+      con <- pool::poolCheckout(process_pool())
+      result <- tryCatch(import_requests(con, prepared, input$log_upload$name),
+                         finally = pool::poolReturn(con))
+      status <- sprintf("Imported %d requests; rejected %d rows.", result$accepted, result$rejected)
+      output$upload_status <- renderText(status)
+      rv$refresh_trigger <- rv$refresh_trigger + 1
     }, error = function(e) {
-      output$upload_status <- renderText(paste("Error processing file:", e$message))
+      message("Import failed: ", conditionMessage(e))
+      output$upload_status <- renderText("Import failed. Check file format, size and whether it was already imported.")
     })
   })
-  
+
   # DT outputs
   output$table_top_paths <- renderDT({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT path, COUNT(*) as count FROM", tbl_req(), w$clause, "GROUP BY path ORDER BY count DESC LIMIT 10"), w$params)
+      query_db(process_pool(), paste("SELECT path, COUNT(*) as count FROM", tbl_req(), w$clause, "GROUP BY path ORDER BY count DESC LIMIT 10"), w$params)
     }, error = function(e) data.frame(path=character(0), count=integer(0)))
     datatable(res, options = list(pageLength = 5))
   })
@@ -256,7 +229,7 @@ server <- function(input, output, session) {
   output$table_top_ips <- renderDT({
     w <- where_data()$ip
     res <- tryCatch({
-      query_db(pool, paste("SELECT ip_address, total_requests, risk_score, classification FROM", tbl_ip(), w$clause, "ORDER BY risk_score DESC LIMIT 10"), w$params)
+      query_db(process_pool(), paste("SELECT ip_address, total_requests, risk_score, classification FROM", tbl_ip(), w$clause, "ORDER BY risk_score DESC LIMIT 10"), w$params)
     }, error = function(e) data.frame(ip=character(0)))
     datatable(res, options = list(pageLength = 5))
   })
@@ -264,7 +237,7 @@ server <- function(input, output, session) {
   output$table_recent_reqs <- renderDT({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT timestamp, ip_address, method, path, status_code, classification FROM", tbl_req(), w$clause, "ORDER BY timestamp DESC LIMIT 50"), w$params)
+      query_db(process_pool(), paste("SELECT timestamp, ip_address, method, path, status_code, classification FROM", tbl_req(), w$clause, "ORDER BY timestamp DESC LIMIT 50"), w$params)
     }, error = function(e) data.frame())
     datatable(res, options = list(pageLength = 10))
   })
@@ -273,7 +246,7 @@ server <- function(input, output, session) {
   output$chart_time <- renderPlotly({
     w <- where_data()$req
     res <- tryCatch({
-      query_db(pool, paste("SELECT date_trunc('hour', timestamp) as time_bucket, COUNT(*) as count FROM", tbl_req(), w$clause, "GROUP BY time_bucket ORDER BY time_bucket"), w$params)
+      query_db(process_pool(), paste("SELECT date_trunc('hour', timestamp) as time_bucket, COUNT(*) as count FROM", tbl_req(), w$clause, "GROUP BY time_bucket ORDER BY time_bucket"), w$params)
     }, error = function(e) data.frame(time_bucket=Sys.time(), count=0))
     
     if (nrow(res) > 0) {

@@ -2,7 +2,7 @@
 library(stringr)
 
 parse_nginx_log <- function(filepath) {
-  lines <- readLines(filepath, warn = FALSE)
+  lines <- read_log_lines(filepath)
 
   # Nginx combined log format regex
   # Example: 127.0.0.1 - - [10/Oct/2000:13:55:36 -0700] "GET /apache_pb.gif HTTP/1.0" 200 2326 "http://www.example.com/start.html" "Mozilla/4.0 (compatible; MSIE 5.5; Windows NT 5.0)"
@@ -22,8 +22,10 @@ parse_nginx_log <- function(filepath) {
     timestamp_str <- matches[valid_idx, 3]
     # Nginx timestamps look like: 10/Oct/2000:13:55:36 -0700
     # Parse to POSIXct
+    old_locale <- Sys.getlocale("LC_TIME")
+    on.exit(Sys.setlocale("LC_TIME", old_locale), add = TRUE)
     Sys.setlocale("LC_TIME", "C")
-    parsed_time <- as.POSIXct(timestamp_str, format="%d/%b/%Y:%H:%M:%S %z")
+    parsed_time <- suppressWarnings(as.POSIXct(timestamp_str, format="%d/%b/%Y:%H:%M:%S %z", tz = "UTC"))
 
     resp_size <- matches[valid_idx, 6]
     resp_size[resp_size == "-"] <- "0"
@@ -43,6 +45,11 @@ parse_nginx_log <- function(filepath) {
   }
 
   invalid_lines <- lines[!valid_idx]
+  if (!is.null(valid_data)) {
+    accepted <- validate_requests(valid_data)
+    invalid_lines <- c(invalid_lines, lines[valid_idx][!accepted])
+    valid_data <- valid_data[accepted, , drop = FALSE]
+  }
 
   list(
     valid = valid_data,

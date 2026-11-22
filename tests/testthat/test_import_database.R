@@ -1,0 +1,40 @@
+source("../../R/db.R")
+source("../../R/import.R")
+source("../../R/detection_rules.R")
+source("../../R/scoring.R")
+
+test_that("PostgreSQL imports are atomic, deduplicated and accurately summarized", {
+  skip_if(!nzchar(Sys.getenv("TEST_DB_NAME")), "Set TEST_DB_NAME to an isolated test database")
+  con <- DBI::dbConnect(RPostgres::Postgres(), dbname = Sys.getenv("TEST_DB_NAME"),
+    host = Sys.getenv("TEST_DB_HOST", ""), user = Sys.getenv("TEST_DB_USER", Sys.info()[["user"]]),
+    password = Sys.getenv("TEST_DB_PASSWORD", ""))
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  schema <- paste0("rtraffic_test_", Sys.getpid(), "_", sample.int(1e8, 1))
+  DBI::dbExecute(con, paste("CREATE SCHEMA", schema))
+  on.exit(DBI::dbExecute(con, paste("DROP SCHEMA", schema, "CASCADE")), add = TRUE, after = FALSE)
+  DBI::dbExecute(con, paste("SET search_path TO", schema))
+  for (file in c("../../scripts/init_db.sql", "../../scripts/migrations/001_import_registry.sql")) {
+    DBI::dbExecute(con, paste(readLines(file), collapse = "\n"), immediate = TRUE)
+  }
+  row <- data.frame(ip_address = "192.0.2.1", timestamp = as.POSIXct("2026-11-22 12:00:00", tz = "UTC"),
+    method = "GET", path = "/", protocol = "HTTP/1.1", status_code = 200L, response_size = 12,
+    referrer = "-", user_agent = "Mozilla", bot_score = 0, classification = "likely_human")
+  prepared <- list(data = row, rejected = 0L, hash = paste(rep("a", 64), collapse = ""), type = "nginx")
+  first <- import_requests(con, prepared, "sample.log")
+  expect_equal(first$accepted, 1L)
+  expect_error(import_requests(con, prepared, "renamed.log"), "already been imported")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM requests")$n, 1)
+  prepared$hash <- paste(rep("b", 64), collapse = "")
+  prepared$rejected <- -1L
+  expect_error(import_requests(con, prepared, "failure.log"), "check constraint")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM requests")$n, 1)
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM imported_log_files")$n, 1)
+  prepared$rejected <- 0L
+  prepared$data <- rbind(row, transform(row, path = "/.env", bot_score = 8, classification = "scanner"))
+  import_requests(con, prepared, "next.log")
+  summary <- DBI::dbGetQuery(con, "SELECT * FROM ip_summary")
+  expect_equal(summary$total_requests, 3L)
+  expect_equal(summary$unique_paths, 2L)
+  expect_equal(summary$classification, "scanner")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM import_registry")$n, 2)
+})

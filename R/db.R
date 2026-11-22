@@ -12,7 +12,10 @@ get_db_pool <- function() {
     host = cfg$db_host,
     port = cfg$db_port,
     user = cfg$db_user,
-    password = cfg$db_password
+    password = cfg$db_password,
+    minSize = 0, maxSize = 5, idleTimeout = 60,
+    options = "-c statement_timeout=10000 -c lock_timeout=5000 -c timezone=UTC",
+    bigint = "numeric"
   )
 }
 
@@ -20,27 +23,26 @@ get_db_pool <- function() {
 query_db <- function(pool, query, params = list()) {
   con <- poolCheckout(pool)
   on.exit(poolReturn(con), add = TRUE)
-  if (length(params) == 0) {
-    dbGetQuery(con, query)
-  } else {
-    res <- dbSendQuery(con, query)
-    dbBind(res, params)
-    data <- dbFetch(res)
-    dbClearResult(res)
-    data
-  }
+  query_connection(con, query, params)
 }
 
 execute_db <- function(pool, query, params = list()) {
   con <- poolCheckout(pool)
   on.exit(poolReturn(con), add = TRUE)
-  if (length(params) == 0) {
-    dbExecute(con, query)
-  } else {
-    res <- dbSendStatement(con, query)
-    dbBind(res, params)
-    rows <- dbGetRowsAffected(res)
-    dbClearResult(res)
-    rows
-  }
+  execute_connection(con, query, params)
+}
+
+# Always clear a prepared result, including when dbBind rejects a value.
+query_connection <- function(con, query, params = list()) {
+  result <- DBI::dbSendQuery(con, query)
+  on.exit(DBI::dbClearResult(result), add = TRUE)
+  if (length(params)) DBI::dbBind(result, params)
+  DBI::dbFetch(result)
+}
+
+execute_connection <- function(con, query, params = list()) {
+  result <- DBI::dbSendStatement(con, query)
+  on.exit(DBI::dbClearResult(result), add = TRUE)
+  if (length(params)) DBI::dbBind(result, params)
+  DBI::dbGetRowsAffected(result)
 }
