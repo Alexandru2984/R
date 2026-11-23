@@ -101,7 +101,7 @@ spreadsheet_safe <- function(data) {
 traffic_report <- function(snapshot) {
   m <- traffic_metrics(snapshot$data)
   f <- snapshot$filters
-  c("TRAFFIC INTELLIGENCE REPORT", paste("Source:", snapshot$source),
+  report <- c("TRAFFIC INTELLIGENCE REPORT", paste("Source:", snapshot$source),
     paste("Generated UTC:", format(snapshot$updated, tz = "UTC", usetz = TRUE)),
     paste("Window UTC:", f$start, "through", f$end),
     paste("Filters:", paste(names(f), vapply(f, as.character, character(1)), sep = "=", collapse = "; ")),
@@ -111,4 +111,12 @@ traffic_report <- function(snapshot) {
     paste("Coverage:", if (snapshot$capped) "latest 20,000 matching requests before classification filter" else "all requests matching source/date/search filters"),
     "Classifications are heuristic signals. User agents and source IPs do not verify identity.",
     "Live exports contain potentially sensitive log data. Store and share with care.")
+  if (!is.null(snapshot$comparison)) {
+    ref <- snapshot$comparison
+    rows <- comparison_rows(m, ref$metrics)
+    report <- c(report, "", sprintf("PREVIOUS PERIOD: %s through %s UTC", ref$filters$start, ref$filters$end),
+      paste("Previous coverage:", if (ref$capped) "Latest 20,000 before classification filter" else "Complete matching window"),
+      apply(rows, 1, function(row) paste(row, collapse = " | ")))
+  }
+  report
 }

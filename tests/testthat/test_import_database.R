@@ -4,6 +4,8 @@ source("../../R/audit.R")
 source("../../R/import.R")
 source("../../R/detection_rules.R")
 source("../../R/scoring.R")
+source("../../R/analytics.R")
+source("../../R/comparison.R")
 
 test_that("PostgreSQL imports are atomic, deduplicated and accurately summarized", {
   skip_if(!nzchar(Sys.getenv("TEST_DB_NAME")), "Set TEST_DB_NAME to an isolated test database")
@@ -43,6 +45,15 @@ test_that("PostgreSQL imports are atomic, deduplicated and accurately summarized
   expect_equal(summary$classification, "scanner")
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM import_registry")$n, 2)
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM admin_audit_events")$n, 2)
+  read_pool <- pool::dbPool(RPostgres::Postgres(), dbname = Sys.getenv("TEST_DB_NAME"),
+    host = Sys.getenv("TEST_DB_HOST", ""), user = Sys.getenv("TEST_DB_USER", Sys.info()[["user"]]),
+    password = Sys.getenv("TEST_DB_PASSWORD", ""), options = paste0("-c search_path=", schema, " -c timezone=UTC"))
+  on.exit(pool::poolClose(read_pool), add = TRUE, after = FALSE)
+  f <- normalize_filters(c("2026-11-22", "2026-11-22"), today = as.Date("2026-11-23"))
+  s <- load_traffic_snapshot(read_pool, f, compare = TRUE)
+  expect_equal(nrow(s$data), 3L)
+  expect_equal(s$comparison$metrics$total, 0L)
+  expect_equal(query_db(read_pool, "SHOW transaction_read_only")$transaction_read_only, "off")
   prepared$hash <- paste(rep("c", 64), collapse = "")
   expect_error(import_requests(con, prepared, "audit-failure.log", actor = "bad\nactor"), "Invalid audit actor")
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM requests")$n, 3)

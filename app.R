@@ -4,7 +4,7 @@ library(DT)
 library(plotly)
 library(dplyr)
 for (module in c("config", "db", "auth", "validation", "parser_nginx", "parser_cloudflare",
-                 "detection_rules", "scoring", "summaries", "audit", "import", "analytics", "demo", "ui_components")) {
+                 "detection_rules", "scoring", "summaries", "audit", "import", "analytics", "comparison", "demo", "ui_components")) {
   source(paste0("R/", module, ".R"))
 }
 options(shiny.sanitize.errors = TRUE, shiny.maxRequestSize = MAX_IMPORT_BYTES, shiny.autoreload = FALSE)
@@ -21,7 +21,7 @@ auth_global_limiter <- new_auth_limiter()
 demo_cache <- NULL
 public_demo <- function() {
   if (is.null(demo_cache) || difftime(Sys.time(), demo_cache$created, units = "secs") > 60) {
-    demo_cache <<- list(data = generate_demo_data(), created = Sys.time())
+    demo_cache <<- list(data = generate_demo_data(n = 12000L, days = 14L), created = Sys.time())
   }
   demo_cache$data
 }
@@ -83,7 +83,7 @@ server <- function(input, output, session) {
   output$demo_banner <- renderUI({
     tags$div(class = if (logged_in()) "source-banner source-live" else "source-banner",
       tags$span(class = "source-label", if (logged_in()) "PRIVATE WORKSPACE" else "INTERACTIVE DEMO"),
-      tags$span(if (logged_in()) "Production logs · visible to your admin session only." else "Explore synthetic traffic. Production logs stay private."))
+      tags$span(if (logged_in()) "Production logs · visible to your admin session only." else "Explore two weeks of synthetic traffic. Production logs stay private."))
   })
   observeEvent(input$btn_login_modal, {
     showModal(modalDialog(title = "Admin workspace", size = "s", easyClose = TRUE,
@@ -165,12 +165,19 @@ server <- function(input, output, session) {
     live <- logged_in()
     tryCatch({
       f <- stable_filters()
+      compare <- isTRUE(input$compare_period)
       if (live) {
         req(admin_now())
-        query <- request_query(f)
-        data <- query_db(process_pool(), query$sql, query$params)
-      } else data <- filter_demo(public_demo(), f)
-      finish_snapshot(data, f, if (live) "Live production" else "Synthetic demo")
+        result <- load_traffic_snapshot(process_pool(), f, compare)
+      } else {
+        demo <- public_demo()
+        result <- finish_snapshot(filter_demo(demo, f), f, "Synthetic demo")
+        if (compare) {
+          previous <- previous_period_filters(f)
+          result$comparison <- comparison_reference(finish_snapshot(filter_demo(demo, previous), previous, "Synthetic demo"))
+        }
+      }
+      result
     }, error = function(e) {
       # Do not log attacker-controlled SQL parameters, raw log contents or secrets.
       message("Traffic snapshot unavailable [", class(e)[1], "]")
@@ -197,6 +204,22 @@ server <- function(input, output, session) {
       tags$span(sprintf("%s · %s – %s UTC", s$source, s$filters$start, s$filters$end)),
       tags$span(paste(if (s$capped) "Latest 20,000 requests before classification filter ·" else "Complete matching window ·",
         format(s$updated, "%H:%M:%S", tz = "UTC"), "UTC")))
+  })
+  output$comparison_summary <- renderUI({
+    if (!isTRUE(input$compare_period)) return(NULL)
+    s <- snapshot()
+    validate(need(is.null(s$error), s$error))
+    if (s$source == "Live production") req(admin_now())
+    reference <- s$comparison
+    validate(need(!is.null(reference), "Comparison is being prepared."))
+    rows <- comparison_rows(traffic_metrics(s$data), reference$metrics)
+    analytics_card("Compared with the previous period",
+      tags$p(class = "help-text", sprintf("Current: %s – %s · Previous: %s – %s UTC · same filters", s$filters$start, s$filters$end, reference$filters$start, reference$filters$end)),
+      tags$div(class = "comparison-scroll", tags$table(class = "comparison-table",
+        tags$caption(class = "visually-hidden", "Metrics for the current and previous filtered periods"),
+        tags$thead(tags$tr(lapply(names(rows), tags$th))),
+        tags$tbody(lapply(seq_len(nrow(rows)), function(i) tags$tr(lapply(rows[i, ], tags$td)))))),
+      tags$p(class = "help-text", if (s$capped || reference$capped) "One or both periods are capped at their latest 20,000 requests before classification filtering. Deltas describe these snapshots." else "Each period includes its matching requests. pp means percentage points; a zero baseline is shown without a misleading percentage."))
   })
   table_widget <- function(data, selection = "none", page = 10L) {
     if (!ncol(data)) data <- data.frame(Status = character())
@@ -276,6 +299,17 @@ server <- function(input, output, session) {
     validate(need(nrow(d) > 0L, "No matching traffic."))
     plot_ly(d, x = ~as.character(status_code), y = ~Requests, type = "bar", marker = list(color = "#67a9ff"), hoverinfo = "x+y") |> chart_style()
   })
+  output$chart_activity <- renderPlotly({
+    d <- data_view()
+    validate(need(nrow(d) > 0L, "No matching traffic for an activity map."))
+    matrix <- traffic_heatmap(d)
+    plot_ly(x = colnames(matrix), y = rownames(matrix), z = matrix, type = "heatmap",
+      colorscale = list(c(0, "#111d30"), c(.5, "#287f7d"), c(1, "#73f0c8")),
+      hovertemplate = "%{y} %{x} UTC<br>%{z} requests<extra></extra>", colorbar = list(title = "Requests")) |>
+      chart_style() |> layout(yaxis = list(title = "", autorange = "reversed"), xaxis = list(title = "UTC hour", nticks = 6))
+  })
+  output$table_countries <- renderDT(table_widget(head(country_distribution(data_view()), 15L), page = 5L), server = FALSE)
+  output$table_methods <- renderDT(table_widget(method_distribution(data_view()), page = 5L), server = FALSE)
   output$insights <- renderUI({
     d <- data_view(); m <- traffic_metrics(d)
     if (!nrow(d)) return(tags$p("No matching traffic. Reset your filters or import a log file in the admin workspace."))

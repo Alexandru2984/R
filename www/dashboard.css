@@ -110,3 +110,8 @@ table.dataTable td:nth-child(1), table.dataTable td:nth-child(2) { white-space: 
 #table_top_ips table { min-width: 600px; }
 #table_top_paths table { min-width: 360px; }
 #shiny-notification-panel { max-width: min(380px, calc(100vw - 2rem)); }
+.comparison-scroll { overflow-x: auto; }
+.comparison-table { width: 100%; min-width: 470px; font-size: .925rem; }
+.comparison-table th { color: #afc3dd; font-size: .875rem; }
+.comparison-table td, .comparison-table th { padding: .75rem .65rem; border-bottom: 1px solid var(--edge); text-align: left; }
+.comparison-table td:first-child { font-weight: 600; }
