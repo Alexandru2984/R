@@ -114,6 +114,7 @@ traffic_report <- function(snapshot) {
   if (!is.null(snapshot$comparison)) {
     ref <- snapshot$comparison
     rows <- comparison_rows(m, ref$metrics)
+    if (f$end == utc_today()) report <- c(report, "Current period includes an unfinished UTC day; previous period contains full calendar days.")
     report <- c(report, "", sprintf("PREVIOUS PERIOD: %s through %s UTC", ref$filters$start, ref$filters$end),
       paste("Previous coverage:", if (ref$capped) "Latest 20,000 before classification filter" else "Complete matching window"),
       apply(rows, 1, function(row) paste(row, collapse = " | ")))

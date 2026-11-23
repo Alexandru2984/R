@@ -24,8 +24,9 @@ is_suspicious_path <- function(path) {
 }
 
 request_reason <- function(path, ua) {
-  if (is_suspicious_path(path)) return("Sensitive path or injection probe (+8)")
-  if (is_known_bot(ua)) return("Bot/tool user agent claim (+5); identity unverified")
-  if (is.na(ua) || !nzchar(trimws(ua)) || ua == "-") return("Missing user agent (+2); insufficient evidence")
-  "No configured rule matched; humanity unverified"
+  reasons <- character()
+  if (is_suspicious_path(path)) reasons <- c(reasons, "Sensitive path or injection probe (+8)")
+  if (is_known_bot(ua)) reasons <- c(reasons, "Bot/tool user agent claim (+5); identity unverified")
+  if (is.na(ua) || !nzchar(trimws(ua)) || ua == "-") reasons <- c(reasons, "Missing user agent (+2); insufficient evidence")
+  if (length(reasons)) paste(reasons, collapse = "; ") else "No configured rule matched; humanity unverified"
 }

@@ -1,0 +1,31 @@
+for (module in c("auth", "validation", "detection_rules", "scoring", "analytics", "workspace")) source(paste0("../../R/", module, ".R"))
+
+test_that("saved views validate names, settings and source without serializing logs", {
+  f <- normalize_filters(path = "/api")
+  view <- make_saved_view("API traffic", f, "Synthetic demo", compare = TRUE, time_bucket = "day")
+  expect_equal(view$filters$path, "/api")
+  expect_true(view$compare)
+  expect_false("data" %in% names(view))
+  expect_error(make_saved_view("bad\nname", f, "Synthetic demo"), "control")
+  expect_error(make_saved_view("", f, "Synthetic demo"), "view name")
+  expect_error(make_saved_view("View", f, "unknown"), "source")
+  views <- list()
+  for (i in seq_len(MAX_SAVED_VIEWS)) views <- store_saved_view(views, make_saved_view(paste("View", i), f, "Synthetic demo"), paste0("view", i))$views
+  expect_error(store_saved_view(views, view, "view11"), "up to 10")
+  replaced <- store_saved_view(views, make_saved_view("View 1", f, "Synthetic demo", compare = TRUE), "view11")
+  expect_length(replaced$views, 10)
+  expect_equal(replaced$selected, "view1")
+  expect_true(replaced$views$view1$compare)
+})
+
+test_that("the detection lab shares real scoring rules and accounts for every point", {
+  result <- evaluate_rule_sample("/.env", "curl/8.0")
+  expect_equal(result$classification, "scanner")
+  expect_equal(result$score, 13)
+  expect_equal(sum(result$signals$Points), result$score)
+  expect_equal(evaluate_rule_sample("/login", "Mozilla/5.0")$classification, "likely_human")
+  expect_error(evaluate_rule_sample("", "browser"), "path")
+  expect_error(evaluate_rule_sample(rep("/", 2), "browser"), "path")
+  expect_error(evaluate_rule_sample("/", NA_character_), "path")
+  expect_error(evaluate_rule_sample("/\n", "browser"), "control")
+})

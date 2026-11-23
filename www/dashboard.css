@@ -115,3 +115,17 @@ table.dataTable td:nth-child(1), table.dataTable td:nth-child(2) { white-space: 
 .comparison-table th { color: #afc3dd; font-size: .875rem; }
 .comparison-table td, .comparison-table th { padding: .75rem .65rem; border-bottom: 1px solid var(--edge); text-align: left; }
 .comparison-table td:first-child { font-weight: 600; }
+.sidebar-section-title { font-size: 1rem; font-weight: 650; margin: .3rem 0 1rem; }
+.saved-view-actions { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.section-intro { margin: .5rem 0 1.5rem; max-width: 64rem; }
+.section-intro h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); letter-spacing: -.03em; }
+.section-intro p { line-height: 1.65; }
+.lab-score { color: #a9b8cf; font-size: 1rem; }
+.lab-score strong { color: #4dd5ac; font-size: 2.5rem; margin-right: .35rem; }
+.lab-signals { min-width: 0; font-size: .875rem; }
+.lab-result h3 { font-size: 1.45rem; letter-spacing: -.02em; }
+.lab-result p { overflow-wrap: anywhere; }
+@media (max-width: 767px) { .lab-signals td, .lab-signals th { padding: .65rem .4rem; } }
+@media (max-width: 767px) {
+  .bslib-sidebar-layout > .sidebar { max-height: 85vh; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain; }
+}

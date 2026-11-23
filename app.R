@@ -4,7 +4,7 @@ library(DT)
 library(plotly)
 library(dplyr)
 for (module in c("config", "db", "auth", "validation", "parser_nginx", "parser_cloudflare",
-                 "detection_rules", "scoring", "summaries", "audit", "import", "analytics", "comparison", "demo", "ui_components")) {
+                 "detection_rules", "scoring", "summaries", "audit", "import", "analytics", "comparison", "demo", "workspace", "ui_components")) {
   source(paste0("R/", module, ".R"))
 }
 options(shiny.sanitize.errors = TRUE, shiny.maxRequestSize = MAX_IMPORT_BYTES, shiny.autoreload = FALSE)
@@ -28,6 +28,9 @@ public_demo <- function() {
 
 server <- function(input, output, session) {
   logged_in <- reactiveVal(FALSE)
+  saved_views <- reactiveVal(list())
+  saved_view_selection <- reactiveVal("")
+  next_view_id <- 0L
   started <- NULL
   active <- NULL
   last_login <- as.POSIXct(0, origin = "1970-01-01")
@@ -43,6 +46,13 @@ server <- function(input, output, session) {
       last_refresh <<- Sys.time()
       refresh(isolate(refresh()) + 1L)
     }
+  }
+  reset_filter_controls <- function() {
+    updateDateRangeInput(session, "date_filter", start = utc_today() - 6, end = utc_today())
+    updateSelectInput(session, "date_preset", selected = "week")
+    for (id in c("class_filter", "status_filter", "method_filter")) updateSelectInput(session, id, selected = "All")
+    updateTextInput(session, "ip_filter", value = "")
+    updateTextInput(session, "path_filter", value = "")
   }
   audit_status <- reactiveVal(NULL)
   admin_actor <- function() Sys.getenv("APP_USERNAME", "admin")
@@ -63,6 +73,7 @@ server <- function(input, output, session) {
     started <<- NULL
     active <<- NULL
     prepared_upload(NULL)
+    saved_views(list())
     upload_message("Preview a log file before importing it.")
     removeModal()
     nav_select("main_nav", "Dashboard")
@@ -79,6 +90,9 @@ server <- function(input, output, session) {
   output$auth_button_ui <- renderUI({
     if (logged_in()) actionButton("btn_logout", "Sign out", class = "btn-outline-light btn-sm", icon = icon("right-from-bracket"))
     else actionButton("btn_login_modal", "Admin sign in", class = "btn-outline-light btn-sm", icon = icon("lock"))
+  })
+  output$upload_control <- renderUI({
+    if (logged_in()) fileInput("log_upload", "Log file", accept = c(".log", ".txt", ".csv"), buttonLabel = "Choose file", placeholder = "No file selected")
   })
   output$demo_banner <- renderUI({
     tags$div(class = if (logged_in()) "source-banner source-live" else "source-banner",
@@ -116,6 +130,103 @@ server <- function(input, output, session) {
     }
   })
   observeEvent(input$btn_logout, logout())
+  observeEvent(logged_in(), {
+    saved_views(list())
+    saved_view_selection("")
+    updateTextInput(session, "view_name", value = "")
+    reset_filter_controls()
+    updateCheckboxInput(session, "compare_period", value = FALSE)
+    updateSelectInput(session, "time_bucket", selected = "hour")
+    updateTextInput(session, "lab_path", value = "/.env")
+    updateTextInput(session, "lab_user_agent", value = "curl/8.0")
+    updateSelectInput(session, "lab_example", selected = "sensitive")
+  }, ignoreInit = FALSE, priority = 100)
+  observe({
+    views <- saved_views()
+    choices <- c("Choose a saved view" = "", setNames(as.character(names(views)), vapply(views, function(x) x$name, character(1))))
+    selected <- saved_view_selection()
+    if (!scalar_text(selected, 32L) || !selected %in% names(views)) selected <- ""
+    updateSelectInput(session, "saved_view", choices = choices, selected = selected)
+  })
+  observeEvent(input$saved_view, {
+    key <- input$saved_view
+    if (scalar_text(key, 32L) && (key == "" || key %in% names(saved_views()))) saved_view_selection(key)
+  })
+  output$view_status <- renderText(sprintf("%d of %d views · this session only. Reloading the page or switching between demo and admin clears them.", length(saved_views()), MAX_SAVED_VIEWS))
+  observeEvent(input$save_view, {
+    tryCatch({
+      f <- filters()
+      if (logged_in()) req(admin_now())
+      source <- if (logged_in()) "Live production" else "Synthetic demo"
+      bucket <- if (is.null(input$time_bucket)) "hour" else input$time_bucket
+      view <- make_saved_view(input$view_name, f, source, input$compare_period, bucket)
+      next_view_id <<- next_view_id + 1L
+      result <- store_saved_view(saved_views(), view, paste0("view", next_view_id))
+      saved_views(result$views)
+      saved_view_selection(result$selected)
+      touch()
+      showNotification("View saved for this session.", type = "message")
+    }, error = function(e) {
+      message <- conditionMessage(e)
+      public <- if (grepl("view name|10 saved views", message)) message else "This view cannot be saved. Check the filters and try again."
+      showNotification(public, type = "error")
+    })
+  })
+  selected_view <- function() {
+    key <- input$saved_view
+    if (!scalar_text(key, 32L) || !grepl("^view[0-9]+$", key)) return(NULL)
+    view <- saved_views()[[key]]
+    if (is.null(view)) return(NULL)
+    if (view$source == "Live production" && !admin_now()) return(NULL)
+    if (view$source != if (admin_now()) "Live production" else "Synthetic demo") return(NULL)
+    view
+  }
+  observeEvent(input$load_view, {
+    view <- selected_view()
+    req(!is.null(view))
+    f <- view$filters
+    updateDateRangeInput(session, "date_filter", start = f$start, end = f$end)
+    updateSelectInput(session, "class_filter", selected = f$classification)
+    updateSelectInput(session, "status_filter", selected = f$status)
+    updateSelectInput(session, "method_filter", selected = f$method)
+    updateTextInput(session, "ip_filter", value = f$ip)
+    updateTextInput(session, "path_filter", value = f$path)
+    updateCheckboxInput(session, "compare_period", value = view$compare)
+    updateSelectInput(session, "time_bucket", selected = view$time_bucket)
+    touch()
+    showNotification("Saved view restored.", type = "message")
+  })
+  observeEvent(input$delete_view, {
+    req(!is.null(selected_view()))
+    views <- saved_views()
+    views[[input$saved_view]] <- NULL
+    saved_views(views)
+    saved_view_selection("")
+    showNotification("Saved view removed.", type = "message")
+  })
+  observeEvent(input$lab_example, {
+    key <- input$lab_example
+    if (!scalar_text(key, 20L) || !key %in% names(LAB_EXAMPLES)) return()
+    example <- LAB_EXAMPLES[[key]]
+    updateTextInput(session, "lab_path", value = example$path)
+    updateTextInput(session, "lab_user_agent", value = example$ua)
+  })
+  lab_inputs <- debounce(reactive(list(path = input$lab_path, ua = input$lab_user_agent)), 300)
+  output$lab_result <- renderUI({
+    inputs <- lab_inputs()
+    tryCatch({
+      result <- evaluate_rule_sample(inputs$path, inputs$ua)
+      tags$div(class = "lab-result", role = "status",
+        tags$div(class = "eyebrow", "REQUEST SIGNAL"),
+        tags$h3(unname(CLASS_LABELS[result$classification])),
+        tags$p(class = "lab-score", tags$strong(result$score), " rule points"),
+        tags$p(class = "help-text", result$reason),
+        tags$table(class = "comparison-table lab-signals", tags$caption(class = "visually-hidden", "Breakdown of matching detection rules"),
+          tags$thead(tags$tr(lapply(names(result$signals), tags$th))),
+          tags$tbody(lapply(seq_len(nrow(result$signals)), function(i) tags$tr(lapply(result$signals[i, ], tags$td))))),
+        tags$p(class = "help-text mt-3", "Points summarize configured heuristics; they do not verify a visitor's identity or intent."))
+    }, error = function(e) tags$p(class = "data-notice notice-error", "Enter one path and one user agent, without control characters (maximum 4 KiB / 2 KiB)."))
+  })
   observeEvent(input$refresh, { touch(); refresh_data() })
   observe({
     invalidateLater(60000, session)
@@ -133,13 +244,8 @@ server <- function(input, output, session) {
     selected <- if (dates[2] != utc_today()) "custom" else switch(as.character(delta), "0" = "today", "6" = "week", "30" = "month", "custom")
     updateSelectInput(session, "date_preset", selected = selected)
   })
-  observeEvent(input$reset_filters, {
-    updateDateRangeInput(session, "date_filter", start = utc_today() - 6, end = utc_today())
-    updateSelectInput(session, "date_preset", selected = "week")
-    for (id in c("class_filter", "status_filter", "method_filter")) updateSelectInput(session, id, selected = "All")
-    updateTextInput(session, "ip_filter", value = "")
-    updateTextInput(session, "path_filter", value = "")
-  })
+  observeEvent(input$reset_filters, reset_filter_controls())
+
   observeEvent(input$show_threats, updateSelectInput(session, "class_filter", selected = "scanner"))
   output$source_controls <- renderUI({
     if (logged_in()) actionButton("latest_data", "Latest available logs", class = "btn-outline-light w-100")
@@ -215,6 +321,7 @@ server <- function(input, output, session) {
     rows <- comparison_rows(traffic_metrics(s$data), reference$metrics)
     analytics_card("Compared with the previous period",
       tags$p(class = "help-text", sprintf("Current: %s – %s · Previous: %s – %s UTC · same filters", s$filters$start, s$filters$end, reference$filters$start, reference$filters$end)),
+      if (s$filters$end == utc_today()) tags$p(class = "help-text", "The current period includes an unfinished UTC day; the previous period contains full calendar days. Consider excluding today for complete-day comparisons."),
       tags$div(class = "comparison-scroll", tags$table(class = "comparison-table",
         tags$caption(class = "visually-hidden", "Metrics for the current and previous filtered periods"),
         tags$thead(tags$tr(lapply(names(rows), tags$th))),
@@ -223,7 +330,7 @@ server <- function(input, output, session) {
   })
   table_widget <- function(data, selection = "none", page = 10L) {
     if (!ncol(data)) data <- data.frame(Status = character())
-    datatable(data, style = "default", rownames = FALSE, escape = TRUE, selection = selection,
+    datatable(data, style = "default", lazyRender = nrow(data) > 0L, rownames = FALSE, escape = TRUE, selection = selection,
       options = list(pageLength = page, lengthMenu = c(5, 10, 25, 50), scrollX = TRUE,
         autoWidth = TRUE, order = list(), language = list(emptyTable = "No matching requests. Try a wider date range or reset the filters.")))
   }
@@ -391,6 +498,8 @@ server <- function(input, output, session) {
     validate(need(!is.null(history), "Import history is unavailable."))
     table_widget(history)
   }, server = FALSE)
+  # Logout must clear private widgets even after their tab has been hidden.
+  for (id in c("audit_history", "import_history", "import_preview", "upload_control")) outputOptions(output, id, suspendWhenHidden = FALSE)
 }
 
 shinyApp(ui, server)
