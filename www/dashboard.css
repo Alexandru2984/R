@@ -100,3 +100,13 @@ table.dataTable td:nth-child(1), table.dataTable td:nth-child(2) { white-space: 
 .date-fields { display: grid; gap: .6rem; }
 .date-fields label { font-size: .8rem; color: var(--muted); margin-bottom: .2rem; }
 .date-fields input { width: 100%; min-width: 0; color-scheme: dark; }
+.navbar-toggle { border: 1px solid #526782 !important; border-radius: .45rem; background: transparent !important; }
+.navbar-toggle .icon-bar { background-color: #dbe8fa !important; }
+.dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_length label, .dataTables_wrapper .dataTables_filter label,
+.dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_paginate { color: #b9c9df !important; }
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled { color: #8fa1ba !important; }
+#table_recent_reqs table { min-width: 1100px; }
+#table_top_ips table { min-width: 600px; }
+#table_top_paths table { min-width: 360px; }
+#shiny-notification-panel { max-width: min(380px, calc(100vw - 2rem)); }

@@ -32,3 +32,7 @@ Prioritized after this release, with separate acceptance criteria:
 - All analytics and exports identify the source and any row/date limits.
 - Keyboard navigation and 360px mobile layouts remain usable; dynamic failures are explicit rather than fake zero values.
 - Commits use the repository owner's established Git identity, without additional attribution. Push only after final checks.
+
+## Delivery status — 2026-11-23
+
+The five implementation stages are delivered and deployed. Local security/unit/database tests and real desktop/mobile/browser flows pass. See `docs/RELEASE.md` for evidence, the hosted-CI verification boundary, operational backup and remaining product/security work. Future opportunities above are proposals, not features already implemented.

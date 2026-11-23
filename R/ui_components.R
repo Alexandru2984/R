@@ -26,7 +26,15 @@ page_navbar(
   lang = "en", theme = cyber_theme, fillable = FALSE,
   navbar_options = navbar_options(collapsible = TRUE, theme = "dark", bg = "#0b1423"),
   header = tagList(
-    tags$head(tags$link(rel = "icon", type = "image/svg+xml", href = "favicon.svg"), tags$link(rel = "stylesheet", href = "dashboard.css"), tags$script(src = "dashboard.js", defer = NA)),
+    tags$head(
+      tags$meta(name = "description", content = "Explore web traffic, inspect bot and scanner signals, and investigate access logs in an interactive demo. Production logs stay in a private admin workspace."),
+      tags$link(rel = "canonical", href = "https://r.micutu.com/"),
+      tags$meta(property = "og:title", content = "Traffic Intelligence — Understand your web traffic"),
+      tags$meta(property = "og:description", content = "Turn access logs into a clearer picture. Explore synthetic traffic and transparent security signals."),
+      tags$meta(property = "og:type", content = "website"),
+      tags$meta(property = "og:url", content = "https://r.micutu.com/"),
+      tags$meta(name = "twitter:card", content = "summary"),
+      tags$link(rel = "icon", type = "image/svg+xml", href = "favicon.svg"), tags$link(rel = "stylesheet", href = "dashboard.css"), tags$script(src = "dashboard.js", defer = NA)),
     tags$a(class = "skip-link", href = "#main-content", "Skip to traffic analysis"),
     tags$div(class = "page-shell",
       tags$div(class = "hero",

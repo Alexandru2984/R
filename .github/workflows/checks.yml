@@ -1,0 +1,62 @@
+name: Application checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_DB: rtraffic_test
+          POSTGRES_USER: rtraffic_test
+          POSTGRES_PASSWORD: local-ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DB_NAME: rtraffic_test
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_USER: rtraffic_test
+      TEST_DB_PASSWORD: local-ci-only
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+        with:
+          r-version: '4.5.2'
+          use-public-rspm: true
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev libpq-dev libsodium-dev
+      - uses: r-lib/actions/setup-renv@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2
+      - name: Unit, security and PostgreSQL integration tests
+        run: Rscript scripts/run_tests.R
+      - name: Install browser tooling
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright-core install --with-deps chromium
+      - name: Test desktop, mobile and private import flows
+        run: |
+          Rscript scripts/run_qa.R > "$RUNNER_TEMP/rtraffic-qa.log" 2>&1 &
+          qa_pid=$!
+          trap 'kill "$qa_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:43838/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:browser
+      - name: QA server diagnostics
+        if: failure()
+        run: cat "$RUNNER_TEMP/rtraffic-qa.log" 2>/dev/null || true

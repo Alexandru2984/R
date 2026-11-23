@@ -28,3 +28,7 @@ tests/testthat/_snaps/
 *.html
 *.pdf
 *.csv
+# Browser QA tooling and artifacts
+node_modules/
+playwright-report/
+test-results/

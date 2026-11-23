@@ -1,0 +1,9 @@
+# Suggested dedicated ingress entry before the shared catch-all.
+# Requires a planned restart of the shared tunnel; not applied automatically.
+- hostname: r.micutu.com
+  service: https://127.0.0.1:443
+  originRequest:
+    originServerName: r.micutu.com
+    httpHostHeader: r.micutu.com
+    noTLSVerify: false
+    connectTimeout: 10s

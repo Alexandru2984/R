@@ -16,6 +16,11 @@ run_migrations <- function() {
       DBI::dbExecute(con, "INSERT INTO schema_migrations(name) VALUES ($1)", params = list(basename(file)))
       cat("Applied", basename(file), "\n")
     }
+    runtime_role <- Sys.getenv("DB_RUNTIME_ROLE", "")
+    if (nzchar(runtime_role)) {
+      role <- DBI::dbQuoteIdentifier(con, runtime_role)
+      DBI::dbExecute(con, paste("GRANT SELECT,INSERT ON TABLE import_registry TO", role))
+    }
   })
 }
 run_migrations()

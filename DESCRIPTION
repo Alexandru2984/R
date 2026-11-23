@@ -1,0 +1,22 @@
+Package: rtraffic
+Type: Project
+Title: Traffic Intelligence Dashboard
+Version: 0.2.0
+Description: A private log investigation workspace with a synthetic public demo.
+Depends: R (>= 4.5.0)
+Imports:
+    bslib,
+    DBI,
+    DT,
+    digest,
+    dplyr,
+    htmltools,
+    plotly,
+    pool,
+    RPostgres,
+    shiny,
+    sodium,
+    stringr,
+    withr
+Suggests:
+    testthat

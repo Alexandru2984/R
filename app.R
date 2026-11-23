@@ -244,7 +244,8 @@ server <- function(input, output, session) {
     bucket <- if (identical(input$time_bucket, "day")) 86400 else 3600
     d$time <- as.POSIXct(floor(as.numeric(d$timestamp) / bucket) * bucket, origin = "1970-01-01", tz = "UTC")
     counts <- d |> count(time, classification, name = "Requests")
-    plot_ly(counts, x = ~time, y = ~Requests, color = ~classification, colors = CLASS_COLORS,
+    counts$Signal <- unname(CLASS_LABELS[counts$classification])
+    plot_ly(counts, x = ~time, y = ~Requests, color = ~Signal, colors = setNames(CLASS_COLORS, CLASS_LABELS),
       type = "scatter", mode = "lines", line = list(width = 2), hoverinfo = "x+y+name") |> chart_style()
   })
   output$chart_classes <- renderPlotly({

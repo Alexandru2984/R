@@ -46,3 +46,12 @@ References checked: [Shiny upstream advisories](https://github.com/rstudio/shiny
 ## Verification and delivery
 
 Implementation results, test evidence and remaining limits are recorded in `docs/RELEASE.md` when the release is completed.
+
+## Additional runtime findings
+
+- The actual route is Cloudflare Tunnel → Nginx HTTPS vhost → loopback Shiny on 3838. This application's fallback tunnel route inherits `noTLSVerify: true`. The origin certificate is valid through 2027-01-28 and local hostname/certificate verification succeeds. A dedicated strict-TLS ingress is prepared in `deploy/cloudflared-r-route.yml`; applying it requires restarting the shared tunnel and is left for a coordinated VPS maintenance window.
+- Anonymous Shiny sessions can reach framework upload transport even when the admin UI is hidden. Application import authorization remains mandatory. A dedicated temporary-filesystem quota bounds unimported uploads as well as parsed files; body, memory, connection and rate limits remain necessary.
+- The system package's datepicker has a noConflict/data-API error, DT's Bootstrap 5 CSS dependency is missing at its advertised path, and Plotly's legacy typed-array shim references an undefined `GLOBAL`. Application-scoped native date controls, supported table styling and native browser typed arrays avoid these faults without modifying global R packages.
+- Current DB password and admin hash were checked against all local Git history; neither was present. This is not a comprehensive historical secret scan of the VPS or remote forks.
+
+- End-to-end public-domain testing confirmed that the inherited CSP blocked the installed Shiny/htmlwidgets runtime's dynamic JavaScript evaluation, preventing interactive data from rendering despite HTTP 200. The release explicitly permits `unsafe-eval` alongside the existing inline-script allowance. This weakens CSP's protection against script injection and remains a medium residual risk; source restrictions, HTML escaping, Origin validation and private data authorization are still enforced. Removing these allowances requires a CSP-compatible runtime/widget redesign, not merely changing a header. See [CSP evaluation rules](https://www.w3.org/TR/CSP2/).

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /session/
+Disallow: /websocket/
+Disallow: /sockjs/
+Sitemap: https://r.micutu.com/sitemap.xml
