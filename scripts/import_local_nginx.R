@@ -1,7 +1,7 @@
 # Explicit, bounded imports. Intentionally no default scan of unrelated VPS logs.
 source("R/config.R")
 source("R/db.R")
-for (module in c("validation", "parser_nginx", "parser_cloudflare", "detection_rules", "scoring", "import")) source(paste0("R/", module, ".R"))
+for (module in c("validation", "parser_nginx", "parser_cloudflare", "detection_rules", "scoring", "auth", "audit", "import")) source(paste0("R/", module, ".R"))
 run_import <- function() {
   paths <- commandArgs(trailingOnly = TRUE)
   if (!length(paths)) stop("Usage: Rscript scripts/import_local_nginx.R /path/to/access.log", call. = FALSE)

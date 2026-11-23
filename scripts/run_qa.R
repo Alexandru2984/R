@@ -13,7 +13,7 @@ setup <- function() {
   on.exit(pool::poolClose(db_pool), add = TRUE)
   con <- pool::poolCheckout(db_pool)
   on.exit(pool::poolReturn(con), add = TRUE, after = FALSE)
-  for (file in c("scripts/init_db.sql", "scripts/migrations/001_import_registry.sql")) {
+  for (file in c("scripts/init_db.sql", sort(list.files("scripts/migrations", pattern = "[.]sql$", full.names = TRUE)))) {
     DBI::dbExecute(con, paste(readLines(file), collapse = "\n"), immediate = TRUE)
   }
 }

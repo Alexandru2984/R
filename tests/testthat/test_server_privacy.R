@@ -7,6 +7,8 @@ test_that("forged client state cannot leave public demo or import production row
     expect_identical(snapshot()$source, "Synthetic demo")
     expect_gt(nrow(snapshot()$data), 0L)
     session$setInputs(is_logged_in = TRUE, logged_in = TRUE, admin = TRUE, btn_process = 1)
+    session$setInputs(date_preset = c("week", "month"))
+    session$setInputs(date_preset = list(unexpected = "value"))
     expect_false(logged_in())
     expect_null(prepared_upload())
     expect_identical(snapshot()$source, "Synthetic demo")

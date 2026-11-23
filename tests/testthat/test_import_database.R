@@ -1,4 +1,6 @@
 source("../../R/db.R")
+source("../../R/auth.R")
+source("../../R/audit.R")
 source("../../R/import.R")
 source("../../R/detection_rules.R")
 source("../../R/scoring.R")
@@ -13,7 +15,7 @@ test_that("PostgreSQL imports are atomic, deduplicated and accurately summarized
   DBI::dbExecute(con, paste("CREATE SCHEMA", schema))
   on.exit(DBI::dbExecute(con, paste("DROP SCHEMA", schema, "CASCADE")), add = TRUE, after = FALSE)
   DBI::dbExecute(con, paste("SET search_path TO", schema))
-  for (file in c("../../scripts/init_db.sql", "../../scripts/migrations/001_import_registry.sql")) {
+  for (file in c("../../scripts/init_db.sql", sort(list.files("../../scripts/migrations", pattern = "[.]sql$", full.names = TRUE)))) {
     DBI::dbExecute(con, paste(readLines(file), collapse = "\n"), immediate = TRUE)
   }
   row <- data.frame(ip_address = "192.0.2.1", timestamp = as.POSIXct("2026-11-22 12:00:00", tz = "UTC"),
@@ -22,6 +24,9 @@ test_that("PostgreSQL imports are atomic, deduplicated and accurately summarized
   prepared <- list(data = row, rejected = 0L, hash = paste(rep("a", 64), collapse = ""), type = "nginx")
   first <- import_requests(con, prepared, "sample.log")
   expect_equal(first$accepted, 1L)
+  events <- DBI::dbGetQuery(con, "SELECT * FROM admin_audit_events")
+  expect_equal(events$action, "import_completed")
+  expect_equal(events$accepted_rows, 1L)
   expect_error(import_requests(con, prepared, "renamed.log"), "already been imported")
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM requests")$n, 1)
   prepared$hash <- paste(rep("b", 64), collapse = "")
@@ -36,5 +41,10 @@ test_that("PostgreSQL imports are atomic, deduplicated and accurately summarized
   expect_equal(summary$total_requests, 3L)
   expect_equal(summary$unique_paths, 2L)
   expect_equal(summary$classification, "scanner")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM import_registry")$n, 2)
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM admin_audit_events")$n, 2)
+  prepared$hash <- paste(rep("c", 64), collapse = "")
+  expect_error(import_requests(con, prepared, "audit-failure.log", actor = "bad\nactor"), "Invalid audit actor")
+  expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM requests")$n, 3)
   expect_equal(DBI::dbGetQuery(con, "SELECT COUNT(*) AS n FROM import_registry")$n, 2)
 })

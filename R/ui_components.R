@@ -102,7 +102,8 @@ page_navbar(
         textOutput("upload_status"), actionButton("btn_process", "Import validated rows", class = "btn-primary w-100"),
         tags$p(class = "help-text mt-3", "An identical file is imported once. Overlapping files with different contents can still contain duplicate requests.")),
       analytics_card("Preview before saving", DTOutput("import_preview", fill = FALSE), subtitle = "Nothing is saved until you choose Import validated rows.")),
-    analytics_card("Import history", DTOutput("import_history", fill = FALSE), subtitle = "Latest 100 imports. Older imports may not include validation counts.")
+    analytics_card("Import history", DTOutput("import_history", fill = FALSE), subtitle = "Latest 100 imports. Older imports may not include validation counts."),
+    analytics_card("Admin audit trail", textOutput("audit_notice"), DTOutput("audit_history", fill = FALSE), subtitle = "Latest 200 authenticated actions. Passwords, client IPs and raw log contents are never included.")
   ),
   nav_spacer(), nav_item(uiOutput("auth_button_ui")),
   footer = tags$footer(class = "site-footer", tags$span("R Traffic Intelligence · built for closer inspection"),

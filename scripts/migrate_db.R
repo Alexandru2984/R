@@ -19,7 +19,8 @@ run_migrations <- function() {
     runtime_role <- Sys.getenv("DB_RUNTIME_ROLE", "")
     if (nzchar(runtime_role)) {
       role <- DBI::dbQuoteIdentifier(con, runtime_role)
-      DBI::dbExecute(con, paste("GRANT SELECT,INSERT ON TABLE import_registry TO", role))
+      DBI::dbExecute(con, paste("GRANT SELECT,INSERT ON TABLE import_registry,admin_audit_events TO", role))
+      DBI::dbExecute(con, paste("GRANT USAGE ON SEQUENCE admin_audit_events_id_seq TO", role))
     }
   })
 }

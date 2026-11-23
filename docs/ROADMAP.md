@@ -36,3 +36,10 @@ Prioritized after this release, with separate acceptance criteria:
 ## Delivery status — 2026-11-23
 
 The five implementation stages are delivered and deployed. Local security/unit/database tests and real desktop/mobile/browser flows pass. See `docs/RELEASE.md` for evidence, the hosted-CI verification boundary, operational backup and remaining product/security work. Future opportunities above are proposals, not features already implemented.
+
+## Version 0.3 — investigations and accountability
+
+1. Add an authenticated action audit trail with append-only runtime grants; reject malformed preset inputs without destroying the session. Import and its audit event must commit or roll back together.
+2. Compare an equal-length previous period with the same filters and explicit coverage limits. Add UTC activity heatmap and reported-country/method distributions.
+3. Add session-only saved filter views and an isolated detection-rule laboratory. Clear views on authentication/source changes and never persist private filters in browser storage.
+4. Verify isolated database/browser flows and CI, deploy only this application, then push at the end.

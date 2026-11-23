@@ -4,7 +4,7 @@ library(DT)
 library(plotly)
 library(dplyr)
 for (module in c("config", "db", "auth", "validation", "parser_nginx", "parser_cloudflare",
-                 "detection_rules", "scoring", "summaries", "import", "analytics", "demo", "ui_components")) {
+                 "detection_rules", "scoring", "summaries", "audit", "import", "analytics", "demo", "ui_components")) {
   source(paste0("R/", module, ".R"))
 }
 options(shiny.sanitize.errors = TRUE, shiny.maxRequestSize = MAX_IMPORT_BYTES, shiny.autoreload = FALSE)
@@ -44,7 +44,21 @@ server <- function(input, output, session) {
       refresh(isolate(refresh()) + 1L)
     }
   }
-  logout <- function(message = "Signed out. Synthetic demo restored.") {
+  audit_status <- reactiveVal(NULL)
+  admin_actor <- function() Sys.getenv("APP_USERNAME", "admin")
+  audit_event <- function(action) {
+    tryCatch({
+      con <- pool::poolCheckout(process_pool())
+      on.exit(pool::poolReturn(con), add = TRUE)
+      record_admin_event(con, action, admin_actor())
+      audit_status(NULL)
+    }, error = function(e) {
+      message("Admin audit unavailable [", class(e)[1], "]")
+      audit_status("Audit storage is unavailable. This session event could not be recorded.")
+    })
+  }
+  logout <- function(message = "Signed out. Synthetic demo restored.", expired = FALSE) {
+    if (isTRUE(logged_in())) audit_event(if (expired) "session_expired" else "logout")
     logged_in(FALSE)
     started <<- NULL
     active <<- NULL
@@ -56,7 +70,7 @@ server <- function(input, output, session) {
   }
   observe({
     invalidateLater(30000, session)
-    if (logged_in() && !admin_now()) logout("Your admin session expired. Sign in again.")
+    if (logged_in() && !admin_now()) logout("Your admin session expired. Sign in again.", expired = TRUE)
   })
   observeEvent(input$activity, touch(), ignoreInit = TRUE)
   observe({
@@ -93,6 +107,7 @@ server <- function(input, output, session) {
       started <<- now
       active <<- now
       logged_in(TRUE)
+      audit_event("login_success")
       removeModal()
       showNotification("Signed in. Your private workspace is ready.", type = "message")
     } else {
@@ -107,11 +122,12 @@ server <- function(input, output, session) {
     if (isTRUE(input$auto_refresh)) refresh_data()
   })
   observeEvent(input$date_preset, {
+    if (!scalar_text(input$date_preset, 16L) || !input$date_preset %in% c("today", "week", "month", "custom")) return()
     days <- switch(input$date_preset, "today" = 0, "week" = 6, "month" = 30, NULL)
     if (!is.null(days)) updateDateRangeInput(session, "date_filter", start = utc_today() - days, end = utc_today())
   })
   observeEvent(input$date_filter, {
-    dates <- tryCatch(as.Date(input$date_filter), error = function(e) as.Date(NA))
+    dates <- tryCatch(as.Date(as.character(input$date_filter)), error = function(e) as.Date(NA))
     if (length(dates) != 2L || anyNA(dates)) return()
     delta <- as.numeric(dates[2] - dates[1])
     selected <- if (dates[2] != utc_today()) "custom" else switch(as.character(delta), "0" = "today", "6" = "week", "30" = "month", "custom")
@@ -314,7 +330,7 @@ server <- function(input, output, session) {
     tryCatch({
       prepared <- prepared_upload()
       con <- pool::poolCheckout(process_pool())
-      result <- tryCatch(import_requests(con, prepared, prepared$filename), finally = pool::poolReturn(con))
+      result <- tryCatch(import_requests(con, prepared, prepared$filename, admin_actor()), finally = pool::poolReturn(con))
       prepared_upload(NULL)
       upload_message(sprintf("Imported %d requests. %d malformed rows were skipped.", result$accepted, result$rejected))
       refresh(isolate(refresh()) + 1L)
@@ -323,6 +339,17 @@ server <- function(input, output, session) {
       upload_message("Import failed. This file may already be imported, or storage is unavailable. No partial import was saved.")
     })
   })
+  output$audit_notice <- renderText({
+    if (admin_now()) audit_status() else ""
+  })
+  output$audit_history <- renderDT({
+    refresh()
+    if (!admin_now()) return(table_widget(data.frame()))
+    events <- tryCatch(read_admin_events(process_pool()), error = function(e) NULL)
+    validate(need(!is.null(events), "The audit trail is unavailable."))
+    events$time_utc <- format(events$time_utc, "%Y-%m-%d %H:%M:%S", tz = "UTC")
+    table_widget(events)
+  }, server = FALSE)
   output$import_history <- renderDT({
     refresh()
     if (!admin_now()) return(table_widget(data.frame()))

@@ -8,7 +8,7 @@ prepare_import <- function(path, type, uploaded = FALSE) {
        hash = digest::digest(file = path, algo = "sha256"), type = type)
 }
 
-import_requests <- function(con, prepared, filename) {
+import_requests <- function(con, prepared, filename, actor = "admin") {
   stopifnot(is.character(filename), length(filename) == 1L, !is.na(filename))
   filename <- substr(basename(gsub("\\\\", "/", filename)), 1, 200)
   DBI::dbWithTransaction(con, {
@@ -37,6 +37,7 @@ import_requests <- function(con, prepared, filename) {
         total_requests=EXCLUDED.total_requests,unique_paths=EXCLUDED.unique_paths,
         error_404_count=EXCLUDED.error_404_count,risk_score=EXCLUDED.risk_score,
         classification=EXCLUDED.classification,last_seen=EXCLUDED.last_seen", params = list(meta$id[1]))
+    record_admin_event(con, "import_completed", actor, meta$id[1], nrow(data), prepared$rejected)
     list(file_id = meta$id[1], accepted = nrow(data), rejected = prepared$rejected)
   })
 }
