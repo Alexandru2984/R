@@ -55,3 +55,13 @@ Implementation results, test evidence and remaining limits are recorded in `docs
 - Current DB password and admin hash were checked against all local Git history; neither was present. This is not a comprehensive historical secret scan of the VPS or remote forks.
 
 - End-to-end public-domain testing confirmed that the inherited CSP blocked the installed Shiny/htmlwidgets runtime's dynamic JavaScript evaluation, preventing interactive data from rendering despite HTTP 200. The release explicitly permits `unsafe-eval` alongside the existing inline-script allowance. This weakens CSP's protection against script injection and remains a medium residual risk; source restrictions, HTML escaping, Origin validation and private data authorization are still enforced. Removing these allowances requires a CSP-compatible runtime/widget redesign, not merely changing a header. See [CSP evaluation rules](https://www.w3.org/TR/CSP2/).
+
+
+## Version 0.3 follow-up
+
+- Authenticated session actions and imports now have a private audit trail. Runtime grants are limited to read/append plus sequence usage. Import audit failure rolls back the import; an unavailable audit store during a session event is reported in the private workspace. Rejected login attempts are not persisted and remain process-limited.
+- Logout/source changes clear named views, filter fields, sample inputs, private widgets and the dynamic file input. Empty table updates explicitly disable lazy rendering so hidden widgets do not retain their private DOM content after logout.
+- Saved views are bounded to ten, validated on creation and source-checked on restoration. They remain in server session memory and are never placed in browser storage or shareable URLs.
+- Detection lab inputs have byte/control-character limits and are processed as strings by the same rules as imported traffic; they do not execute code, query live data or write requests.
+- Comparison reads use a read-only repeatable-read transaction. Zero baselines, incomplete current days and capped windows are described explicitly. Country labels are supplied by logs, not verified geolocation.
+- Malformed date-preset shapes fail closed without terminating the session. Tests also confirm the connection pool returns to normal read/write state after comparison transactions.

@@ -43,3 +43,8 @@ The five implementation stages are delivered and deployed. Local security/unit/d
 2. Compare an equal-length previous period with the same filters and explicit coverage limits. Add UTC activity heatmap and reported-country/method distributions.
 3. Add session-only saved filter views and an isolated detection-rule laboratory. Clear views on authentication/source changes and never persist private filters in browser storage.
 4. Verify isolated database/browser flows and CI, deploy only this application, then push at the end.
+
+
+The version 0.3 implementation includes authenticated-action audit, prior-period comparisons, the activity/country/method views, named session views and the detection lab. Multi-tenant accounts, shared auth limits, verified crawler ownership, retention enforcement and incremental ingestion are still separate follow-ups; the audit trail does not imply these are implemented.
+
+Version 0.3 is deployed and its local/database/browser/public-domain evidence is recorded in `docs/RELEASE-v0.3.md`. Hosted workflow status remains visible in GitHub Actions for the release commit.
