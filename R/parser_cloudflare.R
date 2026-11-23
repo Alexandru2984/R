@@ -15,6 +15,11 @@ parse_cloudflare_csv <- function(filepath) {
   timestamp <- suppressWarnings(as.POSIXct(raw_time, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC"))
   missing <- is.na(timestamp)
   timestamp[missing] <- suppressWarnings(as.POSIXct(raw_time[missing], format = "%Y-%m-%d %H:%M:%OS", tz = "UTC"))
+  iso <- grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$", raw_time)
+  sql <- grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?$", raw_time)
+  timestamp[is.na(iso) | is.na(sql) | !(iso | sql)] <- as.POSIXct(NA)
+  status_raw <- get_col(c("edgeresponsestatus", "status", "statuscode"))
+  status_raw[is.na(status_raw) | !grepl("^[0-9]{3}$", status_raw)] <- NA_character_
   numeric_time <- grepl("^[0-9]{10}([0-9]{3}|[0-9]{9})?$", raw_time)
   numeric_time[is.na(numeric_time)] <- FALSE
   if (any(numeric_time)) {
@@ -27,7 +32,7 @@ parse_cloudflare_csv <- function(filepath) {
     method = get_col(c("clientrequestmethod", "method", "reqmethod"), "GET"),
     path = get_col(c("clientrequesturi", "uri", "path", "reqpath")),
     protocol = get_col(c("clientrequestprotocol", "protocol", "proto"), "HTTP/1.1"),
-    status_code = suppressWarnings(as.integer(get_col(c("edgeresponsestatus", "status", "statuscode")))),
+    status_code = suppressWarnings(as.integer(status_raw)),
     response_size = suppressWarnings(as.numeric(get_col(c("edgeresponsebytes", "bytes", "size", "length"), "0"))),
     referrer = get_col(c("clientrequestreferer", "referer", "referrer", "httpreferer")),
     user_agent = get_col(c("clientrequestuseragent", "useragent", "ua", "httpuseragent")),

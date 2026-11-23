@@ -1,224 +1,105 @@
-# R/ui_components.R
 library(shiny)
 library(bslib)
 library(DT)
 library(plotly)
 
-# Define a completely custom modern theme
-cyber_theme <- bs_theme(
-  version = 5,
-  bg = "#0b1121",
-  fg = "#f8fafc",
-  primary = "#06b6d4",    # Cyan
-  secondary = "#1e293b",
-  success = "#10b981",
-  info = "#3b82f6",       # Blue
-  warning = "#8b5cf6",    # Purple
-  danger = "#ef4444",     # Red
-  # Native stacks avoid both browser tracking requests and server-side font
-  # downloads while retaining a clean UI on every major platform.
+cyber_theme <- bs_theme(version = 5, bg = "#0b1423", fg = "#eaf1fc", primary = "#4dd5ac",
+  secondary = "#253650", success = "#4dd5ac", info = "#67a9ff", warning = "#f2c66d", danger = "#ff7186",
   base_font = font_collection("system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"),
   heading_font = font_collection("system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"),
-  code_font = font_collection("ui-monospace", "SFMono-Regular", "Cascadia Code", "Liberation Mono", "monospace")
-)
+  code_font = font_collection("ui-monospace", "SFMono-Regular", "Cascadia Code", "Liberation Mono", "monospace"))
 
-# Add custom glowing CSS rules
-cyber_theme <- bs_add_rules(cyber_theme, "
-  /* Custom CSS applied */
-  body {
-    -webkit-font-smoothing: antialiased;
-  }
-  .navbar {
-    background: rgba(15, 23, 42, 0.8) !important;
-    backdrop-filter: blur(12px) !important;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .navbar-brand {
-    font-weight: 800;
-    background: linear-gradient(90deg, #06b6d4, #8b5cf6);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: 0.5px;
-  }
-  .bslib-sidebar-layout > .collapse-toggle,
-  .bslib-sidebar-layout > .sidebar {
-    background-color: rgba(30, 41, 59, 0.4) !important;
-    backdrop-filter: blur(10px);
-    border-right: 1px solid rgba(255,255,255,0.05);
-  }
-  .card {
-    background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.8)) !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-radius: 16px !important;
-    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(12px);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
-  .card:hover {
-    box-shadow: 0 10px 40px -10px rgba(6, 182, 212, 0.15);
-    transform: translateY(-2px);
-  }
-  .card-header {
-    background: transparent !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-    color: #94a3b8;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 0.85rem;
-    padding: 1.25rem 1.5rem;
-  }
-  .bslib-value-box {
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-radius: 16px !important;
-    background: linear-gradient(135deg, rgba(30,41,59,0.8), rgba(15,23,42,0.9)) !important;
-    position: relative;
-    overflow: hidden;
-  }
-  .bslib-value-box::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 3px;
-  }
-  .bslib-value-box.bg-primary::before { background: #06b6d4; box-shadow: 0 0 15px #06b6d4; }
-  .bslib-value-box.bg-info::before { background: #3b82f6; box-shadow: 0 0 15px #3b82f6; }
-  .bslib-value-box.bg-warning::before { background: #8b5cf6; box-shadow: 0 0 15px #8b5cf6; }
-  .bslib-value-box.bg-danger::before { background: #ef4444; box-shadow: 0 0 15px #ef4444; }
-  
-  .value-box-value {
-    font-weight: 800 !important;
-    font-size: 2.5rem !important;
-    background: linear-gradient(to bottom right, #ffffff, #94a3b8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .value-box-title {
-    font-weight: 600;
-    color: #cbd5e1 !important;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 0.85rem !important;
-  }
+analytics_card <- function(title, ..., subtitle = NULL) {
+  card(fill = FALSE, card_header(tags$div(class = "card-title-text", title),
+                   if (!is.null(subtitle)) tags$div(class = "card-subtitle-text", subtitle)), card_body(..., fillable = FALSE))
+}
+metric_card <- function(name, output_id, note, class = "") {
+  tags$div(class = paste("metric", class), tags$div(class = "metric-name", name),
+    tags$div(class = "metric-value", textOutput(output_id, inline = TRUE)), tags$div(class = "metric-note", note))
+}
 
-  .form-control, .form-select {
-    background-color: rgba(15, 23, 42, 0.6) !important;
-    border: 1px solid #334155 !important;
-    color: #f8fafc !important;
-    border-radius: 8px !important;
-    padding: 0.6rem 1rem;
-  }
-  .form-control:focus, .form-select:focus {
-    border-color: #06b6d4 !important;
-    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2) !important;
-  }
-  .btn-primary {
-    background: linear-gradient(90deg, #3b82f6, #06b6d4) !important;
-    border: none !important;
-    border-radius: 8px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 0.6rem 1.2rem;
-    transition: all 0.3s ease;
-  }
-  .btn-primary:hover {
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-    transform: translateY(-1px);
-  }
-  .btn-success {
-    background: linear-gradient(90deg, #10b981, #059669) !important;
-    border: none !important;
-    border-radius: 8px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  table.dataTable { border-collapse: collapse !important; color: #f8fafc; }
-  table.dataTable thead th { border-bottom: 1px solid #334155 !important; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; padding: 1rem; }
-  table.dataTable tbody tr { background-color: transparent !important; }
-  table.dataTable tbody td { border-bottom: 1px solid rgba(255, 255, 255, 0.02) !important; padding: 0.8rem 1rem; }
-  table.dataTable tbody tr:hover { background-color: rgba(255, 255, 255, 0.03) !important; }
-  .dataTables_wrapper .dataTables_paginate .paginate_button { color: #f8fafc !important; border-radius: 6px; }
-  .dataTables_wrapper .dataTables_info { color: #94a3b8 !important; }
-  .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter { color: #94a3b8 !important; }
-  
-  /* Upload status */
-  #upload_status {
-    color: #10b981;
-    font-weight: 600;
-  }
-")
-
-ui <- page_navbar(
-  id = "main_nav",
-  title = "R Traffic Intelligence",
-  theme = cyber_theme,
-  fillable = TRUE,
-  
-  nav_spacer(),
-  nav_item(uiOutput("auth_button_ui")),
-  
-  nav_panel("Dashboard",
-    uiOutput("demo_banner"),
-    layout_sidebar(
-      sidebar = sidebar(
-        title = HTML("<span style='font-weight:700; letter-spacing:1px; color:#f8fafc'>FILTERS</span>"),
-        width = 300,
-        dateRangeInput("date_filter", "Date Range", end = Sys.Date(), max = Sys.Date()),
-        selectInput("class_filter", "Classification", 
-                    choices = c("All", "likely_human", "known_bot", "crawler", "scanner", "suspicious", "unknown")),
-        br(),
-        actionButton("refresh", "Refresh Data", class = "btn-primary w-100", icon = icon("sync"))
-      ),
-      
-      layout_columns(
-        col_widths = c(3, 3, 3, 3),
-        value_box("Total Requests", textOutput("total_req"), theme = "primary", showcase = icon("server")),
-        value_box("Unique IPs", textOutput("unique_ips"), theme = "info", showcase = icon("users")),
-        value_box("Suspected Bots", textOutput("sus_bots"), theme = "warning", showcase = icon("robot")),
-        value_box("Suspicious 404s", textOutput("sus_404"), theme = "danger", showcase = icon("exclamation-triangle"))
-      ),
-      
-      layout_columns(
-        col_widths = 12,
-        card(
-          card_header(HTML("<i class='fa fa-chart-line me-2'></i> Requests over Time")),
-          card_body(class = "p-0", plotlyOutput("chart_time", height = "350px"))
-        )
-      ),
-      
-      layout_columns(
-        col_widths = c(6, 6),
-        card(
-          card_header(HTML("<i class='fa fa-route me-2'></i> Top Paths")),
-          card_body(DTOutput("table_top_paths"))
-        ),
-        card(
-          card_header(HTML("<i class='fa fa-shield-alt me-2'></i> Top IPs by Risk")),
-          card_body(DTOutput("table_top_ips"))
-        )
+build_ui <- function() {
+ui_today <- as.Date(Sys.time(), tz = "UTC")
+page_navbar(
+  id = "main_nav", title = tags$span(tags$span(class = "brand-mark", "R"), "Traffic Intelligence"),
+  window_title = "Traffic Intelligence — Understand your web traffic",
+  lang = "en", theme = cyber_theme, fillable = FALSE,
+  navbar_options = navbar_options(collapsible = TRUE, theme = "dark", bg = "#0b1423"),
+  header = tagList(
+    tags$head(tags$link(rel = "icon", type = "image/svg+xml", href = "favicon.svg"), tags$link(rel = "stylesheet", href = "dashboard.css"), tags$script(src = "dashboard.js", defer = NA)),
+    tags$a(class = "skip-link", href = "#main-content", "Skip to traffic analysis"),
+    tags$div(class = "page-shell",
+      tags$div(class = "hero",
+        tags$div(tags$div(class = "eyebrow", "YOUR TRAFFIC, IN FOCUS"),
+          tags$h1("See the signal in every request."),
+          tags$p("Understand your visitors, investigate suspicious activity, and turn raw access logs into a clearer picture.")),
+        tags$div(class = "hero-actions", downloadButton("export_csv", "Export CSV", class = "btn-outline-light"),
+          downloadButton("export_report", "Save report", class = "btn-outline-light"))),
+      uiOutput("demo_banner"))),
+  nav_panel("Dashboard", value = "Dashboard",
+    layout_sidebar(fillable = FALSE,
+      sidebar = sidebar(title = "Explore traffic", width = 285, open = list(desktop = "open", mobile = "closed"),
+        selectInput("date_preset", "Time window", choices = c("Last 7 days" = "week", "Today" = "today", "Last 31 days" = "month", "Custom dates" = "custom"), selected = "week", selectize = FALSE),
+        tags$div(id = "date_filter", class = "traffic-date-range shiny-input-container",
+          tags$fieldset(tags$legend("Dates (UTC)"), tags$div(class = "date-fields",
+            tags$div(tags$label(`for` = "date_start", "From"), tags$input(id = "date_start", type = "date", class = "form-control", value = as.character(ui_today - 6), max = as.character(ui_today))),
+            tags$div(tags$label(`for` = "date_end", "Through"), tags$input(id = "date_end", type = "date", class = "form-control", value = as.character(ui_today), max = as.character(ui_today)))))),
+        selectInput("class_filter", "Traffic signal", choices = c("All traffic" = "All", "Likely human" = "likely_human", "Bot / tool claim" = "known_bot", "Scanner signals" = "scanner", "Suspicious" = "suspicious", "Unknown" = "unknown"), selectize = FALSE),
+        selectInput("status_filter", "HTTP status", choices = c("All responses" = "All", "Success · 2xx" = "2xx", "Redirect · 3xx" = "3xx", "Client errors · 4xx" = "4xx", "Server errors · 5xx" = "5xx", "Not found · 404" = "404"), selectize = FALSE),
+        textInput("ip_filter", "IP address", placeholder = "e.g. 192.0.2.201"),
+        textInput("path_filter", "Path contains", placeholder = "e.g. /api · press / to search"),
+        selectInput("method_filter", "HTTP method", choices = c("All", "GET", "POST", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS"), selectize = FALSE),
+        tags$hr(),
+        tags$div(class = "filter-actions", actionButton("refresh", "Refresh traffic", icon = icon("rotate"), class = "btn-primary w-100"),
+          actionButton("reset_filters", "Reset filters", class = "btn-outline-light w-100")),
+        uiOutput("source_controls"),
+        checkboxInput("auto_refresh", "Refresh every minute", value = FALSE),
+        tags$p(class = "help-text", "Up to 31 days and the latest 20,000 matching requests. Classification applies within that snapshot.")),
+      tags$main(id = "main-content", tabindex = "-1",
+        uiOutput("coverage"),
+        tags$section(class = "metric-grid", `aria-label` = "Traffic summary",
+          metric_card("Requests", "total_req", "In your filtered snapshot"),
+          metric_card("Unique IPs", "unique_ips", "Addresses, not verified people"),
+          metric_card("Flagged requests", "sus_bots", "Scanner & suspicious signals", "metric-risk"),
+          metric_card("HTTP error rate", "sus_404", "Responses with status 4xx / 5xx", "metric-error")),
+        card(card_header(tags$div(class = "chart-toolbar",
+          tags$div(tags$div(class = "card-title-text", "Traffic over time"), tags$div(class = "card-subtitle-text", "Request volume by signal · UTC")),
+          selectInput("time_bucket", "Group by", choices = c("Hour" = "hour", "Day" = "day"), selectize = FALSE))),
+          card_body(plotlyOutput("chart_time", height = "320px"))),
+        tags$div(class = "analytics-grid",
+          analytics_card("Traffic composition", plotlyOutput("chart_classes", height = "290px"), subtitle = "Signals are heuristic; bot identity is unverified."),
+          analytics_card("HTTP responses", plotlyOutput("chart_status", height = "290px"), subtitle = "Find errors, redirects and successful requests.")),
+        tags$div(class = "analytics-grid wide-main",
+          analytics_card("IPs to investigate", DTOutput("table_top_ips", fill = FALSE), subtitle = "Select an IP for evidence and a focused view. Up to 1,000 addresses."),
+          analytics_card("At a glance", uiOutput("insights"), actionButton("show_threats", "Explore scanner signals", class = "btn-outline-light mt-3"))),
+        analytics_card("Most requested paths", DTOutput("table_top_paths", fill = FALSE), subtitle = "Your top 20 paths by request count."),
+        analytics_card("Request explorer", DTOutput("table_recent_reqs", fill = FALSE), subtitle = "Latest 1,000 requests in this snapshot. Select a row for details; export CSV for the full snapshot."),
+        analytics_card("How to read the signals",
+          tags$details(class = "policy-note", tags$summary("Scoring, coverage and privacy"),
+            tags$p(tags$strong("Transparent rules. "), "Sensitive endpoints, traversal and basic injection probes add 8 points. A bot or tool user-agent claim adds 5. A missing user agent adds 2. Signals can combine; a suspicious path takes precedence."),
+            tags$p(tags$strong("Investigation, not automatic blocking. "), "These rules do not prove identity or malicious intent. Normal login and admin routes alone do not count as scanner activity. Review context before acting."),
+            tags$p(tags$strong("One consistent snapshot. "), "Charts, metrics and exports use the same filtered requests. Large result sets include only the latest 20,000 requests before classification filtering. Empty hours may appear as gaps."),
+            tags$p(tags$strong("Public by design, private by default. "), "The public demo is generated locally from synthetic traffic. Production data requires admin authentication. Live exports may contain IP addresses, URLs and user agents.")))
       )
     )
   ),
-  
-  nav_panel("Logs & Import",
-    layout_columns(
-      col_widths = c(4, 8),
-      card(
-        card_header(HTML("<i class='fa fa-upload me-2'></i> Upload Logs")),
-        card_body(
-          fileInput("log_upload", "Select Log File", accept = c(".log", ".txt", ".csv")),
-          radioButtons("log_type", "Log Type", choices = c("Nginx" = "nginx", "Cloudflare" = "cloudflare")),
-          br(),
-          actionButton("btn_process", "Process File", class = "btn-success w-100", icon = icon("cogs")),
-          br(),
-          tags$div(class = "mt-3 text-center", textOutput("upload_status"))
-        )
-      ),
-      card(
-        card_header(HTML("<i class='fa fa-list me-2'></i> Recent Requests")),
-        card_body(DTOutput("table_recent_reqs"))
-      )
-    )
-  )
+  nav_panel("Logs & Import", value = "Logs & Import",
+    tags$div(class = "import-intro", tags$h2("Bring your logs into focus"),
+      tags$p(class = "text-muted", "Preview, validate, then import. All accepted rows are saved together, and identical files are detected by content.")),
+    tags$div(class = "import-grid",
+      analytics_card("Upload a log file",
+        fileInput("log_upload", "Log file", accept = c(".log", ".txt", ".csv"), buttonLabel = "Choose file", placeholder = "No file selected"),
+        radioButtons("log_type", "Format", choices = c("Nginx combined log" = "nginx", "Cloudflare CSV" = "cloudflare")),
+        tags$p(class = "help-text", "Maximum 10 MiB and 50,000 lines. The preview shows up to 20 accepted rows. Invalid rows are skipped and counted."),
+        textOutput("upload_status"), actionButton("btn_process", "Import validated rows", class = "btn-primary w-100"),
+        tags$p(class = "help-text mt-3", "An identical file is imported once. Overlapping files with different contents can still contain duplicate requests.")),
+      analytics_card("Preview before saving", DTOutput("import_preview", fill = FALSE), subtitle = "Nothing is saved until you choose Import validated rows.")),
+    analytics_card("Import history", DTOutput("import_history", fill = FALSE), subtitle = "Latest 100 imports. Older imports may not include validation counts.")
+  ),
+  nav_spacer(), nav_item(uiOutput("auth_button_ui")),
+  footer = tags$footer(class = "site-footer", tags$span("R Traffic Intelligence · built for closer inspection"),
+    tags$span("Synthetic public demo · private admin workspace · UTC timestamps"))
 )
+
+}
+ui <- function(request = NULL) build_ui()

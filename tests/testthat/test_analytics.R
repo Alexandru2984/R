@@ -47,3 +47,12 @@ test_that("CSV exports neutralize spreadsheet formulas including whitespace pref
   expect_identical(result$path[6:7], data$path[6:7])
   expect_identical(result$status, data$status)
 })
+
+test_that("an empty database snapshot retains its typed analysis columns", {
+  d <- generate_demo_data(10L)
+  d <- d[0, setdiff(names(d), c("classification", "bot_score"))]
+  s <- finish_snapshot(d, normalize_filters(), "Live production")
+  expect_true(all(c("classification", "bot_score", "reason") %in% names(s$data)))
+  expect_equal(traffic_metrics(s$data)$error_rate, 0)
+  expect_equal(nrow(ip_investigation(s$data)), 0L)
+})

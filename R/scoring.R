@@ -1,10 +1,11 @@
 # R/scoring.R
 
 score_requests <- function(df) {
-  if (is.null(df) || nrow(df) == 0) return(df)
+  if (is.null(df)) return(df)
   
-  df$bot_score <- 0.0
-  df$classification <- "unknown"
+  df$bot_score <- rep(0.0, nrow(df))
+  df$classification <- rep("unknown", nrow(df))
+  if (!nrow(df)) return(df)
   
   # Score user agents
   bot_values <- unique(df$user_agent)

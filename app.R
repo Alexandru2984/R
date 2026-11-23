@@ -110,13 +110,34 @@ server <- function(input, output, session) {
     days <- switch(input$date_preset, "today" = 0, "week" = 6, "month" = 30, NULL)
     if (!is.null(days)) updateDateRangeInput(session, "date_filter", start = utc_today() - days, end = utc_today())
   })
+  observeEvent(input$date_filter, {
+    dates <- tryCatch(as.Date(input$date_filter), error = function(e) as.Date(NA))
+    if (length(dates) != 2L || anyNA(dates)) return()
+    delta <- as.numeric(dates[2] - dates[1])
+    selected <- if (dates[2] != utc_today()) "custom" else switch(as.character(delta), "0" = "today", "6" = "week", "30" = "month", "custom")
+    updateSelectInput(session, "date_preset", selected = selected)
+  })
   observeEvent(input$reset_filters, {
     updateDateRangeInput(session, "date_filter", start = utc_today() - 6, end = utc_today())
+    updateSelectInput(session, "date_preset", selected = "week")
     for (id in c("class_filter", "status_filter", "method_filter")) updateSelectInput(session, id, selected = "All")
     updateTextInput(session, "ip_filter", value = "")
     updateTextInput(session, "path_filter", value = "")
   })
   observeEvent(input$show_threats, updateSelectInput(session, "class_filter", selected = "scanner"))
+  output$source_controls <- renderUI({
+    if (logged_in()) actionButton("latest_data", "Latest available logs", class = "btn-outline-light w-100")
+  })
+  observeEvent(input$latest_data, {
+    req(admin_now())
+    tryCatch({
+      latest <- query_db(process_pool(), "SELECT MAX(timestamp) AS latest FROM requests")$latest[1]
+      if (is.na(latest)) { showNotification("No production logs have been imported yet."); return() }
+      end <- min(as.Date(latest, tz = "UTC"), utc_today())
+      updateDateRangeInput(session, "date_filter", start = end - 6, end = end)
+      touch()
+    }, error = function(e) showNotification("The latest log date is unavailable.", type = "error"))
+  })
   filters <- reactive({
     normalize_filters(input$date_filter, if (is.null(input$class_filter)) "All" else input$class_filter,
       if (is.null(input$status_filter)) "All" else input$status_filter, input$ip_filter, input$path_filter,
@@ -162,7 +183,8 @@ server <- function(input, output, session) {
         format(s$updated, "%H:%M:%S", tz = "UTC"), "UTC")))
   })
   table_widget <- function(data, selection = "none", page = 10L) {
-    datatable(data, rownames = FALSE, escape = TRUE, selection = selection,
+    if (!ncol(data)) data <- data.frame(Status = character())
+    datatable(data, style = "default", rownames = FALSE, escape = TRUE, selection = selection,
       options = list(pageLength = page, lengthMenu = c(5, 10, 25, 50), scrollX = TRUE,
         autoWidth = TRUE, order = list(), language = list(emptyTable = "No matching requests. Try a wider date range or reset the filters.")))
   }
@@ -209,6 +231,8 @@ server <- function(input, output, session) {
         tags$dt("Response"), tags$dd(paste(row$status_code, "·", row$response_size, "bytes"))), footer = modalButton("Close")))
   })
   chart_style <- function(chart) {
+    # Supported browsers have native typed arrays; the system legacy shim is broken.
+    chart$dependencies <- Filter(function(dep) dep$name != "typedarray", chart$dependencies)
     chart |> layout(paper_bgcolor = "transparent", plot_bgcolor = "transparent", font = list(color = "#b9c6dc", family = "system-ui"),
       xaxis = list(title = "", gridcolor = "#263248"), yaxis = list(title = "Requests", gridcolor = "#263248", rangemode = "tozero"),
       margin = list(l = 48, r = 20, t = 15, b = 50), legend = list(orientation = "h", x = 0, y = -0.2)) |>
@@ -216,23 +240,23 @@ server <- function(input, output, session) {
   }
   output$chart_time <- renderPlotly({
     d <- data_view()
-    validate(need(nrow(d), "No traffic in this window. Reset filters to explore the demo."))
-    bucket <- if (identical(input$time_bucket, "day")) "days" else "hours"
-    d$time <- as.POSIXct(cut(d$timestamp, breaks = bucket), tz = "UTC")
+    validate(need(nrow(d) > 0L, "No traffic in this window. Reset filters to explore the demo."))
+    bucket <- if (identical(input$time_bucket, "day")) 86400 else 3600
+    d$time <- as.POSIXct(floor(as.numeric(d$timestamp) / bucket) * bucket, origin = "1970-01-01", tz = "UTC")
     counts <- d |> count(time, classification, name = "Requests")
     plot_ly(counts, x = ~time, y = ~Requests, color = ~classification, colors = CLASS_COLORS,
       type = "scatter", mode = "lines", line = list(width = 2), hoverinfo = "x+y+name") |> chart_style()
   })
   output$chart_classes <- renderPlotly({
     d <- data_view() |> count(classification, name = "Requests")
-    validate(need(nrow(d), "No matching traffic."))
+    validate(need(nrow(d) > 0L, "No matching traffic."))
     plot_ly(d, labels = ~unname(CLASS_LABELS[classification]), values = ~Requests, type = "pie", hole = .65,
       marker = list(colors = unname(CLASS_COLORS[d$classification])), textinfo = "percent", hoverinfo = "label+value+percent") |>
       chart_style() |> layout(showlegend = TRUE)
   })
   output$chart_status <- renderPlotly({
     d <- data_view() |> count(status_code, name = "Requests")
-    validate(need(nrow(d), "No matching traffic."))
+    validate(need(nrow(d) > 0L, "No matching traffic."))
     plot_ly(d, x = ~as.character(status_code), y = ~Requests, type = "bar", marker = list(color = "#67a9ff"), hoverinfo = "x+y") |> chart_style()
   })
   output$insights <- renderUI({
@@ -294,7 +318,7 @@ server <- function(input, output, session) {
       upload_message(sprintf("Imported %d requests. %d malformed rows were skipped.", result$accepted, result$rejected))
       refresh(isolate(refresh()) + 1L)
     }, error = function(e) {
-      message("Import failed [", class(e)[1], "]")
+      message("Import failed [", class(e)[1], "]: ", substr(strsplit(conditionMessage(e), "\n", fixed = TRUE)[[1]][1], 1, 300))
       upload_message("Import failed. This file may already be imported, or storage is unavailable. No partial import was saved.")
     })
   })
