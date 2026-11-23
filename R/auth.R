@@ -32,7 +32,7 @@ auth_locked <- function(limiter, key, now = Sys.time()) {
   !is.null(entry) && entry$locked_until > now
 }
 
-record_auth_failure <- function(limiter, key, now = Sys.time()) {
+record_auth_failure <- function(limiter, key, now = Sys.time(), max_failures = AUTH_MAX_FAILURES) {
   keys <- ls(limiter, all.names = TRUE)
   if (length(keys) >= AUTH_MAX_KEYS) {
     stale <- vapply(keys, function(k) {
@@ -50,7 +50,7 @@ record_auth_failure <- function(limiter, key, now = Sys.time()) {
   }
 
   entry$count <- entry$count + 1L
-  if (entry$count >= AUTH_MAX_FAILURES) entry$locked_until <- now + AUTH_LOCK_SECONDS
+  if (entry$count >= max_failures) entry$locked_until <- now + AUTH_LOCK_SECONDS
   limiter[[key]] <- entry
 
   auth_locked(limiter, key, now)

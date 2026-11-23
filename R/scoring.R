@@ -7,14 +7,16 @@ score_requests <- function(df) {
   df$classification <- "unknown"
   
   # Score user agents
-  bot_idx <- sapply(df$user_agent, is_known_bot)
+  bot_values <- unique(df$user_agent)
+  bot_idx <- vapply(bot_values, is_known_bot, logical(1))[match(df$user_agent, bot_values)]
   df$bot_score[bot_idx] <- df$bot_score[bot_idx] + 5.0
   
   empty_ua_idx <- is.na(df$user_agent) | df$user_agent == "-" | trimws(df$user_agent) == ""
   df$bot_score[empty_ua_idx] <- df$bot_score[empty_ua_idx] + 2.0
   
   # Score paths
-  suspicious_path_idx <- sapply(df$path, is_suspicious_path)
+  path_values <- unique(df$path)
+  suspicious_path_idx <- vapply(path_values, is_suspicious_path, logical(1))[match(df$path, path_values)]
   df$bot_score[suspicious_path_idx] <- df$bot_score[suspicious_path_idx] + 8.0
   
   # Set classifications

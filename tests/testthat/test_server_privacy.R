@@ -1,0 +1,15 @@
+test_that("forged client state cannot leave public demo or import production rows", {
+  env <- new.env(parent = globalenv())
+  withr::with_dir("../..", sys.source("app.R", envir = env))
+  expect_warning(withr::with_dir("../..", shiny::testServer(env$server, {
+    session$setInputs(date_filter = c(utc_today() - 6, utc_today()), class_filter = "All", status_filter = "All", method_filter = "All")
+    expect_false(logged_in())
+    expect_identical(snapshot()$source, "Synthetic demo")
+    expect_gt(nrow(snapshot()$data), 0L)
+    session$setInputs(is_logged_in = TRUE, logged_in = TRUE, admin = TRUE, btn_process = 1)
+    expect_false(logged_in())
+    expect_null(prepared_upload())
+    expect_identical(snapshot()$source, "Synthetic demo")
+    expect_null(env$shared_pool)
+  })), "doesn.t currently simulate a realistic request")
+})
