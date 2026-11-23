@@ -26,7 +26,7 @@ The updated application is deployed at **https://r.micutu.com/** on the existing
 - Runtime DB role retains no schema CREATE, superuser, CREATEDB, CREATEROLE or BYPASSRLS privileges. Required import INSERT/UPDATE grants were verified; the new registry has only SELECT/INSERT grants for that role.
 - Migration was applied through local PostgreSQL administration, then rerun successfully for idempotence. Runtime privileges were not broadened to permit schema creation.
 - Browser tool dependency audit reported zero vulnerabilities. This does not cover all R/system/embedded JavaScript dependencies.
-- Workflow YAML and action commit pins were checked locally; the local workflow-equivalent test suite passed. Hosted GitHub Actions status must be checked after the final push and is not implied by local success.
+- The first hosted workflow revealed a missing test dependency in the initial lockfile. The lock was regenerated with development dependencies included; hosted verification is rerun after the correction. Local success alone is not treated as hosted CI success.
 
 ## Operational record
 

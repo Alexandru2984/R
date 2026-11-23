@@ -84,7 +84,7 @@ npx playwright-core install chromium
 npm run test:browser
 ```
 
-The test-only server uses temporary QA credentials and port 43838. Browser import tests refuse remote URLs. `BROWSER_EXECUTABLE` can select an existing Chromium binary; `TEST_ARTIFACT_DIR` selects screenshot storage. Browser tooling and R dependencies are pinned separately. CI runs unit/security tests, real PostgreSQL transaction tests and desktop/mobile browser flows; it does not deploy or access production secrets.
+The test-only server uses temporary QA credentials and port 43838. Browser import tests refuse remote URLs. `BROWSER_EXECUTABLE` can select an existing Chromium binary; `TEST_ARTIFACT_DIR` selects screenshot storage. Browser tooling and R dependencies are pinned separately. Refresh the R lockfile with `renv::snapshot(type = "explicit", dev = TRUE)` so test dependencies remain included. CI runs unit/security tests, real PostgreSQL transaction tests and desktop/mobile browser flows; it does not deploy or access production secrets.
 
 ## Operations and limitations
 
