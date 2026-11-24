@@ -19,6 +19,16 @@ const artifacts = process.env.TEST_ARTIFACT_DIR || '/tmp/rtraffic-browser-artifa
    current.on('pageerror', error => errors.push(error.stack));
    current.on('console', msg => { if(msg.type()==='error') errors.push(msg.text()); });
  });
+ async function settleMobileNavigation(current) {
+   await current.waitForFunction(()=>!document.querySelector('.navbar-collapse')?.classList.contains('collapsing'));
+ }
+ async function openMobileNavigation(current) {
+   await settleMobileNavigation(current);
+   const open = await current.locator('.navbar-collapse').evaluate(el=>el.classList.contains('show') || el.classList.contains('in'));
+   if(!open) await current.getByRole('button',{name:'Toggle navigation'}).click();
+   await settleMobileNavigation(current);
+   await current.locator('a[data-value="Dashboard"]').waitFor({state:'visible'});
+ }
  const page = await context.newPage();
  await page.goto(base, {waitUntil:'networkidle'});
  await page.waitForFunction(()=>document.querySelector('#total_req')?.textContent.trim().match(/[1-9]/),{timeout:30000});
@@ -95,17 +105,18 @@ const artifacts = process.env.TEST_ARTIFACT_DIR || '/tmp/rtraffic-browser-artifa
   const dimensions=await mobile.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
   console.log('viewport',dimensions);
   assert.ok(dimensions.scroll<=width+1,'horizontal page overflow at '+width);
-  if (width < 768) { await mobile.getByRole('button',{name:'Toggle navigation'}).click(); await mobile.locator('#btn_login_modal').waitFor({state:'visible'}); await mobile.getByRole('button',{name:'Toggle navigation'}).click(); }
+  if (width < 768) { await openMobileNavigation(mobile); await mobile.locator('#btn_login_modal').waitFor({state:'visible'}); await mobile.getByRole('button',{name:'Toggle navigation'}).click(); await settleMobileNavigation(mobile); }
   if(width<768){
-    await mobile.getByRole('button',{name:'Toggle navigation'}).click();
+    await openMobileNavigation(mobile);
     await mobile.locator('a[data-value="Detection lab"]').click();
     await mobile.waitForFunction(()=>document.querySelector('#lab_result')?.textContent.includes('13'));
     assert.ok(await mobile.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     await mobile.screenshot({path:path.join(artifacts,`lab-mobile-${width}.png`),fullPage:true});
-    if(!await mobile.locator('a[data-value="Dashboard"]').isVisible()) await mobile.getByRole('button',{name:'Toggle navigation'}).click();
+    await openMobileNavigation(mobile);
     await mobile.locator('a[data-value="Dashboard"]').click();
-    const expanded=await mobile.getByRole('button',{name:'Toggle navigation'}).getAttribute('aria-expanded');
-    if(expanded==='true') await mobile.getByRole('button',{name:'Toggle navigation'}).click();
+    await settleMobileNavigation(mobile);
+    const stillOpen=await mobile.locator('.navbar-collapse').evaluate(el=>el.classList.contains('show') || el.classList.contains('in'));
+    if(stillOpen) { await mobile.getByRole('button',{name:'Toggle navigation'}).click(); await settleMobileNavigation(mobile); }
   }
   await mobile.screenshot({path:path.join(artifacts,`mobile-${width}.png`),fullPage:true}); assert.equal(await mobile.locator('.collapse-toggle').getAttribute('aria-expanded'), width < 768 ? 'false' : 'true'); await mobile.close();
  }

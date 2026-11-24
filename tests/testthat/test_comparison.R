@@ -37,3 +37,12 @@ test_that("untrusted country/method labels are classified without becoming chart
   expect_equal(countries$Requests[countries[[1]] == "Unknown"], 2)
   expect_false(any(grepl("svg", method_distribution(d)$Method)))
 })
+
+
+test_that("empty request windows retain typed country/method table columns", {
+  data <- generate_demo_data(5L)[0, ]
+  expect_equal(nrow(country_distribution(data)), 0L)
+  expect_identical(names(country_distribution(data)), c("Reported country", "Requests"))
+  expect_equal(nrow(method_distribution(data)), 0L)
+  expect_identical(names(method_distribution(data)), c("Method", "Requests"))
+})

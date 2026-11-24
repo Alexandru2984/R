@@ -54,6 +54,7 @@ traffic_heatmap <- function(data) {
 }
 
 country_distribution <- function(data) {
+  if (!nrow(data)) return(data.frame("Reported country" = character(), Requests = integer(), check.names = FALSE))
   country <- data$country
   known <- !is.na(country) & grepl("^[A-Za-z]{2}$", country)
   labels <- rep("Unknown", nrow(data))
@@ -64,6 +65,7 @@ country_distribution <- function(data) {
 }
 
 method_distribution <- function(data) {
+  if (!nrow(data)) return(data.frame(Method = character(), Requests = integer()))
   method <- data$method
   known <- !is.na(method) & method %in% c("GET", "POST", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS", "CONNECT", "TRACE")
   method[!known] <- "Other"

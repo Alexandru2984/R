@@ -14,7 +14,7 @@ Deployed on 2026-11-23 at **https://r.micutu.com/**. The previous release was `5
 
 ## Verification
 
-- **150 assertions passed; zero failures, warnings or skipped tests.** Real PostgreSQL tests cover atomic import/audit rollback, exact-file duplicate protection, summary consistency, previous-window reads and restoring ordinary transaction state in pooled connections.
+- **154 assertions passed; zero failures, warnings or skipped tests.** Real PostgreSQL tests cover atomic import/audit rollback, exact-file duplicate protection, summary consistency, previous-window reads and restoring ordinary transaction state in pooled connections.
 - Browser flows passed comparison/report export, activity-map rendering, saved-view restore/delete, lab examples, hostile text escaping, auth source isolation, import preview, successful import, duplicate rejection, private audit display, logout clearing and mobile saved views/lab navigation.
 - Layouts checked at **360, 390 and 768 px**. No page overflow or JavaScript/console errors were observed in these flows. Actual mobile lab and dashboard screenshots were inspected.
 - Real-domain HTTPS/WebSocket checks passed comparison, activity map, lab, mobile navigation/layout under the existing production CSP. Normal HTTPS returned 200; a foreign Origin returned 403.
@@ -36,3 +36,8 @@ Audit records cover authenticated actions, not failed sign-ins or abrupt client 
 Named views are session-scoped rather than durable account bookmarks. Comparison deltas describe capped snapshots when limits apply, and incomplete days are labelled rather than silently extrapolated. The synthetic demo spans fourteen days.
 
 The previously documented Shiny CSP exceptions and shared-tunnel origin-TLS setting remain unchanged. Shared authentication limits, MFA/team roles, verified crawler ownership, incremental/overlap-aware ingestion, multi-source tenancy and retention enforcement remain follow-ups in the roadmap.
+
+
+## Final verification fixes — 2026-11-24
+
+The first hosted 0.3 run exposed empty country/method distribution tables that lacked their second column and a mobile test that could click during a navbar closing animation. Empty distributions now return typed two-column data frames, with four regression assertions; browser navigation explicitly waits for collapse transitions. The complete local desktop/mobile/browser suite passes after both fixes. Production changes are limited to the two empty-result guards; no database or credential change is required.
